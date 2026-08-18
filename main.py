@@ -20,7 +20,7 @@ class QRCodeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("İşçi TC Kimlik QR Kod Oluşturma & Yazdırma Programı")
-        self.root.geometry("1100, 720")
+        self.root.geometry("1100x720")
         self.root.minsize(950, 650)
         
         # Tema ve Stil Ayarları
