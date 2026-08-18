@@ -179,3 +179,160 @@ def create_grid_printable_pages(workers: list[tuple[str, str, str]], items_per_r
     return pages
 
 
+import re
+
+def smart_extract_tckn(cell_value) -> str:
+    """
+    Herhangi bir hücre değerinden (float, int, str, bilimsel gösterim vb.) 
+    11 haneli geçerli TC Kimlik Numarasını yakalar ve doğrular.
+    """
+    if cell_value is None:
+        return ""
+        
+    s = str(cell_value).strip()
+    if not s:
+        return ""
+        
+    # Bilimsel gösterim veya float temizliği (Örn: 10000000146.0 -> 10000000146)
+    if isinstance(cell_value, (float, int)):
+        try:
+            s = f"{cell_value:.0f}"
+        except Exception:
+            pass
+    elif s.endswith(".0"):
+        s = s[:-2]
+        
+    # Sadece rakamları ayıkla
+    clean_digits = "".join([c for c in s if c.isdigit()])
+    
+    # 1. Eğer hücre direkt 11 haneli sayı ise
+    if len(clean_digits) == 11:
+        is_valid, _ = validate_tckn(clean_digits)
+        if is_valid:
+            return clean_digits
+            
+    # 2. Hücre içindeki 11 haneli sayıları regex ile arama (Örn: "TC: 10000000146")
+    matches = re.findall(r'\d{11}', s)
+    for m in matches:
+        is_valid, _ = validate_tckn(m)
+        if is_valid:
+            return m
+            
+    return ""
+
+
+def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
+    """
+    Satır veya sütun yeri ne olursa olsun Excel / CSV dosyasındaki tüm işçileri
+    (Ad, Soyad, TC No) akıllı hücre tarama algoritmasıyla otomatik tespit eder.
+    """
+    raw_rows = []
+    
+    # 1. Dosyayı ham hücre matrisi olarak okuma
+    if filepath.lower().endswith(".csv"):
+        import csv
+        for encoding in ["utf-8-sig", "utf-8", "cp1254", "iso-8859-9", "latin-1"]:
+            try:
+                with open(filepath, mode="r", encoding=encoding) as f:
+                    reader = csv.reader(f)
+                    for r in reader:
+                        raw_rows.append([str(cell).strip() if cell else "" for cell in r])
+                break
+            except Exception:
+                continue
+    else:
+        import openpyxl
+        try:
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            sheet = wb.active
+            for row in sheet.iter_rows(values_only=True):
+                row_cells = []
+                for cell in row:
+                    if cell is not None:
+                        if isinstance(cell, (float, int)):
+                            if isinstance(cell, float) and cell.is_integer():
+                                row_cells.append(str(int(cell)))
+                            else:
+                                row_cells.append(f"{cell:.0f}" if isinstance(cell, float) else str(cell))
+                        else:
+                            row_cells.append(str(cell).strip())
+                    else:
+                        row_cells.append("")
+                raw_rows.append(row_cells)
+        except Exception as e:
+            print(f"Excel Okuma Hatası: {e}")
+            return []
+
+    workers = []
+    seen_tcs = set()
+
+    # 2. Akıllı Hücre Taraması
+    for row in raw_rows:
+        if not any(row):
+            continue
+            
+        tckn_found = ""
+        tckn_col_idx = -1
+        
+        # Satırdaki hücrelerde 11 haneli geçerli TC No arama
+        for col_idx, cell_val in enumerate(row):
+            cand = smart_extract_tckn(cell_val)
+            if cand and cand not in seen_tcs:
+                tckn_found = cand
+                tckn_col_idx = col_idx
+                break
+                
+        if not tckn_found:
+            continue
+            
+        # TC Numarası bulundu! Şimdi aynı satırdaki diğer hücrelerden İsim/Soyisim çıkarma
+        text_candidates = []
+        for col_idx, cell_val in enumerate(row):
+            if col_idx == tckn_col_idx:
+                continue
+                
+            val_str = str(cell_val).strip()
+            if not val_str:
+                continue
+                
+            # Sadece rakamlardan oluşan hücreleri ele (Sıra no, telefon, id vb.)
+            if val_str.isdigit() or val_str.replace('.', '', 1).isdigit():
+                continue
+                
+            val_upper = val_str.upper()
+            if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "T.C. KİMLİK NO", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "PERSONEL", "NOT", "ACİL", "DURUM", "AÇIKLAMA"]:
+                continue
+                
+            text_candidates.append(val_str)
+
+        name = ""
+        surname = ""
+        
+        # 1. Öncelik: "AHMET YILMAZ" gibi tek hücrede ad soyadı birleşmiş metin var mı?
+        multi_word_cells = [c for c in text_candidates if len(c.split()) >= 2]
+        if multi_word_cells:
+            target = multi_word_cells[0]
+            parts = target.split()
+            surname = parts[-1]
+            name = " ".join(parts[:-1])
+        elif len(text_candidates) >= 2:
+            name = text_candidates[0]
+            surname = text_candidates[1]
+        elif len(text_candidates) == 1:
+            name = text_candidates[0]
+            surname = ""
+        else:
+            name = "İŞÇİ"
+            surname = f"({tckn_found[-4:]})"
+
+        workers.append({
+            "name": name.strip(),
+            "surname": surname.strip(),
+            "tckn": tckn_found
+        })
+        seen_tcs.add(tckn_found)
+
+    return workers
+
+
+

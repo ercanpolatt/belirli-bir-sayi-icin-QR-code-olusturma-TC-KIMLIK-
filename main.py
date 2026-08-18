@@ -509,72 +509,47 @@ class QRCodeApp:
             self.refresh_worker_list()
 
     def action_import_excel(self):
-        """Excel veya CSV dosyasından esnek kolon eşleme ile toplu işçi aktarır."""
-        filepath = filedialog.askopenfilename(filetypes=[("Excel / CSV Dosyaları", "*.xlsx *.csv"), ("Tüm Dosyalar", "*.*")])
+        """Excel veya CSV dosyasından akıllı hücre tarama algoritması ile toplu işçi aktarır."""
+        filepath = filedialog.askopenfilename(filetypes=[("Excel / CSV Dosyaları", "*.xlsx *.csv *.xls"), ("Tüm Dosyalar", "*.*")])
         if not filepath:
             return
             
         try:
+            workers_found = qr_generator.smart_parse_excel_or_csv(filepath)
+            
+            if not workers_found:
+                messagebox.showwarning("İşçi Bulunamadı", "Dosyada geçerli 11 haneli TC Kimlik numarasına sahip işçi kaydı bulunamadı.\nLütfen TC Kimlik numaralarının doğruluğunu kontrol ediniz.")
+                return
+
             imported_count = 0
             skipped_count = 0
             
-            rows = []
-            if filepath.endswith(".csv"):
-                import csv
-                with open(filepath, mode="r", encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    rows = [dict(r) for r in reader]
-            else:
-                import openpyxl
-                wb = openpyxl.load_workbook(filepath, data_only=True)
-                sheet = wb.active
-                headers = [str(cell.value).strip() if cell.value is not None else "" for cell in sheet[1]]
-                for row in sheet.iter_rows(min_row=2, values_only=True):
-                    row_dict = {}
-                    for idx, val in enumerate(row):
-                        if idx < len(headers) and headers[idx]:
-                            row_dict[headers[idx]] = str(val).strip() if val is not None else ""
-                    if any(row_dict.values()):
-                        rows.append(row_dict)
-                    
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            def norm(k):
-                return str(k).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
-
-            for r in rows:
-                name, surname, tckn = "", "", ""
+            for w in workers_found:
+                name = w["name"]
+                surname = w["surname"]
+                tckn = w["tckn"]
                 
-                for k, v in r.items():
-                    nk = norm(k)
-                    if nk in ["ad", "adi", "isim", "isım", "name", "first_name", "first name"]:
-                        name = str(v).strip()
-                    elif nk in ["soyad", "soyadi", "soyisim", "soyısım", "surname", "last_name", "last name"]:
-                        surname = str(v).strip()
-                    elif nk in ["tc", "tckn", "tcno", "tc_no", "tc kimlik", "tc_kimlik", "tc kimlik no", "tc_kimlik_no"]:
-                        tckn = str(v).strip().split(".")[0]  # Excel sayılarından .0 temizleme
-
-                is_valid, _ = qr_generator.validate_tckn(tckn)
-                if is_valid:
-                    try:
-                        cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
-                                       (name, surname, tckn, created_at))
-                        imported_count += 1
-                    except sqlite3.IntegrityError:
-                        skipped_count += 1
-                else:
+                try:
+                    cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                                   (name, surname, tckn, created_at))
+                    imported_count += 1
+                except sqlite3.IntegrityError:
                     skipped_count += 1
                     
             conn.commit()
             conn.close()
             
-            messagebox.showinfo("İçe Aktarma Tamamlandı", f"İçe Aktarılan: {imported_count} işçi\nAtlanan (Geçersiz/Mevcut TC): {skipped_count}")
+            msg = f"✓ Toplam Tespit Edilen: {len(workers_found)} işçi\n✓ İçe Aktarılan: {imported_count} yeni kayıt\n⚠ Atlanan (Sistemde Zaten Kayıtlı): {skipped_count}"
+            messagebox.showinfo("İçe Aktarma Başarılı", msg)
             self.refresh_worker_list()
+            self.set_status(f"Excel'den {imported_count} işçi eklendi.")
             
         except Exception as e:
-            messagebox.showerror("İçe Aktarma Hatası", f"Dosya okunurken hata oluştu:\n{str(e)}")
+            messagebox.showerror("İçe Aktarma Hatası", f"Dosya işlenirken hata oluştu:\n{str(e)}")
 
     def action_export_all_qr(self):
         """Tüm kayıtlı işçilerin QR kodlarını bir klasöre PNG olarak kaydeder."""
