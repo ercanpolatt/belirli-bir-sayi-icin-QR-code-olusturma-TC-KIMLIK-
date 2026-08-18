@@ -6,11 +6,11 @@ Bu masaüstü uygulaması, işçilerinizin TC Kimlik Numaralarına göre doğrul
 
 ## 🚀 Özellikler
 
+- **Çoklu Seçim ve Kağıt Tasarruflu Yazdırma (3'lü Izgara):** Tablodan `Ctrl` veya `Shift` tuşlarıyla dilediğiniz kadar işçiyi seçebilir, QR kodları tek bir A4 sayfasına **yan yana 3 tane** gelecek şekilde (3x4 = sayfada 12 kart) yazdırarak kağıt tasarrufu sağlayabilirsiniz.
+- **Esnek Excel / CSV İçe Aktarma:** Excel dosyanızdaki `İsim`, `Ad`, `Soyad`, `Soyisim`, `TC`, `TCKN` kolonlarını otomatik tanıyıp listeye aktarır.
 - **11 Haneli TC Kimlik Doğrulaması:** Girilen TC Kimlik numarasının uzunluğunu ve matematiksel algoritma kuralını canlı kontrol eder.
 - **Doğrudan TC Çıktılı QR Kod:** QR kod taratıldığında ekranda doğrudan işçinin 11 haneli TC Kimlik Numarası görünür.
-- **Yazıcı Seçimi ve Çıktı Alma:** Bilgisayarınıza bağlı olan tüm yazıcıları (A4 yazıcılar, barkod/etiket yazıcıları, PDF vb.) listeler ve seçeceğiniz yazıcıdan yüksek kaliteli kart çıktısı alır.
-- **Veritabanı Entegrasyonu:** İşçi adı, soyadı ve TC No kayıtlarını yerel veritabanında (`workers.db`) güvenle saklar.
-- **Excel / CSV'den Toplu Aktarım:** Var olan işçi listelerinizi `.xlsx` veya `.csv` dosyalarından tek tıkla sisteme aktarır.
+- **Yazıcı Seçimi ve Çıktı Alma:** Bilgisayarınıza bağlı olan tüm yazıcıları listeleyip seçilen yazıcıdan yüksek kaliteli çıktı alır.
 - **Toplu Görsel Dışa Aktarma:** Tüm kayıtlı işçilerin QR kod kartlarını seçilen bir klasöre `.png` formatında kaydeder.
 - **Arama ve Filtreleme:** Kayıtlı işçiler arasında isim, soyisim veya TC Kimlik No ile anlık arama yapabilir.
 
