@@ -112,21 +112,22 @@ class QRCodeApp:
         # Form Alanları
         form_frame = ttk.Frame(left_card, style="Card.TFrame")
         form_frame.pack(fill="x", pady=5)
+        form_frame.columnconfigure(1, weight=1)
         
         # Adı
         ttk.Label(form_frame, text="İşçi Adı:", style="Normal.TLabel").grid(row=0, column=0, sticky="w", pady=4)
         self.entry_name = ttk.Entry(form_frame, font=("Segoe UI", 10))
-        self.entry_name.grid(row=0, column=1, fill="x", expand=True, pady=4, padx=(10, 0))
+        self.entry_name.grid(row=0, column=1, sticky="ew", pady=4, padx=(10, 0))
         
         # Soyadı
         ttk.Label(form_frame, text="İşçi Soyadı:", style="Normal.TLabel").grid(row=1, column=0, sticky="w", pady=4)
         self.entry_surname = ttk.Entry(form_frame, font=("Segoe UI", 10))
-        self.entry_surname.grid(row=1, column=1, fill="x", expand=True, pady=4, padx=(10, 0))
+        self.entry_surname.grid(row=1, column=1, sticky="ew", pady=4, padx=(10, 0))
         
         # TC Kimlik No
         ttk.Label(form_frame, text="TC Kimlik No (11 Hane):", style="Normal.TLabel").grid(row=2, column=0, sticky="w", pady=4)
         self.entry_tckn = ttk.Entry(form_frame, font=("Segoe UI", 11, "bold"))
-        self.entry_tckn.grid(row=2, column=1, fill="x", expand=True, pady=4, padx=(10, 0))
+        self.entry_tckn.grid(row=2, column=1, sticky="ew", pady=4, padx=(10, 0))
         
         # Canlı Tuşlama Takibi (Sadece rakam ve max 11 hane)
         self.entry_tckn.bind("<KeyRelease>", self.on_tckn_input)
