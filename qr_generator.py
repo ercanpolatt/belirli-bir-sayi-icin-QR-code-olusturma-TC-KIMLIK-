@@ -67,56 +67,42 @@ def generate_qr_image(tckn: str, box_size: int = 10, border: int = 2) -> Image.I
 
 def create_printable_badge(name: str, surname: str, tckn: str) -> Image.Image:
     """
-    Yazıcı çıktısı için işçinin QR kodu, Adı-Soyadı ve TC Kimlik Numarasını içeren
-    yüksek kaliteli bir etiket/kart görseli oluşturur (900x600 px).
+    Yazıcı çıktısı için SADECE büyük bir QR kod ve altında İşçinin Adı-Soyadını içeren
+    sade ve yüksek kaliteli etiket/kart görseli oluşturur (800x850 px).
     """
-    width, height = 900, 600
+    width, height = 800, 850
     card = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(card)
     
-    # Kenarlık çizimi
-    draw.rectangle([(20, 20), (width - 20, height - 20)], outline="#2B3A4A", width=4)
-    draw.rectangle([(25, 25), (width - 25, height - 25)], outline="#3B82F6", width=2)
-    
-    # Başlık Alanı
-    draw.rectangle([(25, 25), (width - 25, 110)], fill="#1E293B")
-    
-    # Font seçimi (Sistem fontu yüklenemezsa varsayılan font)
-    try:
-        font_title = ImageFont.truetype("arial.ttf", 36)
-        font_label = ImageFont.truetype("arial.ttf", 26)
-        font_bold = ImageFont.truetype("arialbd.ttf", 34)
-        font_tc = ImageFont.truetype("arialbd.ttf", 32)
-    except IOError:
-        font_title = font_label = font_bold = font_tc = ImageFont.load_default()
-    
-    # Başlık Metni
-    header_text = "İŞÇİ KİMLİK & QR KOD KARTI"
-    bbox = draw.textbbox((0, 0), header_text, font=font_title)
-    text_width = bbox[2] - bbox[0]
-    draw.text(((width - text_width) / 2, 45), header_text, fill="white", font=font_title)
-    
-    # QR Kod Oluşturma ve Yerleştirme
-    qr_img = generate_qr_image(tckn, box_size=11, border=2)
+    # 1. Büyük QR Kod Üretimi (box_size=15 ile geniş QR kod)
+    qr_img = generate_qr_image(tckn, box_size=15, border=2)
     qr_w, qr_h = qr_img.size
-    card.paste(qr_img, (50, 160))
     
-    # İşçi Bilgileri Alanı
-    x_offset = 50 + qr_w + 50
-    y_start = 180
+    # QR Kodu yatayda merkeze yerleştirme
+    qr_x = (width - qr_w) // 2
+    qr_y = 40
+    card.paste(qr_img, (qr_x, qr_y))
     
+    # 2. Ad Soyad Metni
     full_name = f"{name.upper()} {surname.upper()}".strip()
+    if not full_name:
+        full_name = "-"
+        
+    try:
+        font_name = ImageFont.truetype("arialbd.ttf", 46)
+    except IOError:
+        try:
+            font_name = ImageFont.truetype("arial.ttf", 46)
+        except IOError:
+            font_name = ImageFont.load_default()
+            
+    # Ad Soyad metnini ortalama
+    bbox = draw.textbbox((0, 0), full_name, font=font_name)
+    text_w = bbox[2] - bbox[0]
+    text_x = (width - text_w) // 2
+    text_y = qr_y + qr_h + 30
     
-    draw.text((x_offset, y_start), "AD SOYAD:", fill="#64748B", font=font_label)
-    draw.text((x_offset, y_start + 35), full_name if full_name else "-", fill="#0F172A", font=font_bold)
-    
-    draw.text((x_offset, y_start + 120), "TC KİMLİK NO:", fill="#64748B", font=font_label)
-    draw.text((x_offset, y_start + 155), tckn, fill="#1D4ED8", font=font_tc)
-    
-    # Alt Bilgi / Doğrulama Notu
-    footer_text = "Bu QR Kod taranarak TC Kimlik Numarası doğrulanabilir."
-    bbox_f = draw.textbbox((0, 0), footer_text, font=font_label)
-    text_w_f = bbox_f[2] - bbox_f[0]
-    draw.text(((width - text_w_f) / 2, height - 60), footer_text, fill="#475569", font=font_label)
+    draw.text((text_x, text_y), full_name, fill="#000000", font=font_name)
     
     return card
+
