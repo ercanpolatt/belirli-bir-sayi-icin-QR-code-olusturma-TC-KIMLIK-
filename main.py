@@ -418,7 +418,7 @@ class QRCodeApp:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Yazıcı Seçimi ve Çıktı Alma")
-        dialog.geometry("450, 260")
+        dialog.geometry("450x260")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()

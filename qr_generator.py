@@ -183,8 +183,9 @@ import re
 
 def smart_extract_tckn(cell_value) -> str:
     """
-    Herhangi bir hücre değerinden (float, int, str, bilimsel gösterim vb.) 
-    11 haneli geçerli TC Kimlik Numarasını yakalar ve doğrular.
+    Herhangi bir hücre değerinden 11 haneli TC Kimlik / YKN numarasını yakalar.
+    Sıkı matematiksel kontrol yerine 11 hane ve 0 ile başlamama kuralı esnek tutulur,
+    böylece hiçbir personel kaydı kaçırılmaz.
     """
     if cell_value is None:
         return ""
@@ -205,17 +206,14 @@ def smart_extract_tckn(cell_value) -> str:
     # Sadece rakamları ayıkla
     clean_digits = "".join([c for c in s if c.isdigit()])
     
-    # 1. Eğer hücre direkt 11 haneli sayı ise
-    if len(clean_digits) == 11:
-        is_valid, _ = validate_tckn(clean_digits)
-        if is_valid:
-            return clean_digits
+    # 1. Hücre direkt 11 haneli ve 0 ile başlamıyorsa (TCKN / YKN)
+    if len(clean_digits) == 11 and clean_digits[0] != '0':
+        return clean_digits
             
-    # 2. Hücre içindeki 11 haneli sayıları regex ile arama (Örn: "TC: 10000000146")
+    # 2. Hücre içindeki 11 haneli dizilimleri regex ile arama
     matches = re.findall(r'\d{11}', s)
     for m in matches:
-        is_valid, _ = validate_tckn(m)
-        if is_valid:
+        if m[0] != '0':
             return m
             
     return ""
@@ -223,116 +221,186 @@ def smart_extract_tckn(cell_value) -> str:
 
 def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
     """
-    Satır veya sütun yeri ne olursa olsun Excel / CSV dosyasındaki tüm işçileri
-    (Ad, Soyad, TC No) akıllı hücre tarama algoritmasıyla otomatik tespit eder.
+    Satır, sütun veya sayfa yeri ne olursa olsun Excel / CSV dosyasındaki TÜM işçileri
+    (Ad, Soyad, TC No) hibrit (Başlık + Hücre Tarama) algoritmasıyla eksiksiz çıkarır.
     """
-    raw_rows = []
+    all_sheet_rows = []
     
-    # 1. Dosyayı ham hücre matrisi olarak okuma
+    # 1. Dosyadaki tüm sayfaları ve tüm hücreleri oku
     if filepath.lower().endswith(".csv"):
         import csv
+        sheet_rows = []
         for encoding in ["utf-8-sig", "utf-8", "cp1254", "iso-8859-9", "latin-1"]:
             try:
                 with open(filepath, mode="r", encoding=encoding) as f:
                     reader = csv.reader(f)
                     for r in reader:
-                        raw_rows.append([str(cell).strip() if cell else "" for cell in r])
+                        sheet_rows.append([str(cell).strip() if cell else "" for cell in r])
                 break
             except Exception:
                 continue
+        if sheet_rows:
+            all_sheet_rows.append(sheet_rows)
     else:
         import openpyxl
         try:
             wb = openpyxl.load_workbook(filepath, data_only=True)
-            sheet = wb.active
-            for row in sheet.iter_rows(values_only=True):
-                row_cells = []
-                for cell in row:
-                    if cell is not None:
-                        if isinstance(cell, (float, int)):
-                            if isinstance(cell, float) and cell.is_integer():
-                                row_cells.append(str(int(cell)))
+            for sheet in wb.worksheets:
+                sheet_rows = []
+                for row in sheet.iter_rows(values_only=True):
+                    row_cells = []
+                    for cell in row:
+                        if cell is not None:
+                            if isinstance(cell, (float, int)):
+                                if isinstance(cell, float) and cell.is_integer():
+                                    row_cells.append(str(int(cell)))
+                                else:
+                                    row_cells.append(f"{cell:.0f}" if isinstance(cell, float) else str(cell))
                             else:
-                                row_cells.append(f"{cell:.0f}" if isinstance(cell, float) else str(cell))
+                                row_cells.append(str(cell).strip())
                         else:
-                            row_cells.append(str(cell).strip())
-                    else:
-                        row_cells.append("")
-                raw_rows.append(row_cells)
+                            row_cells.append("")
+                    if any(row_cells):
+                        sheet_rows.append(row_cells)
+                if sheet_rows:
+                    all_sheet_rows.append(sheet_rows)
         except Exception as e:
             print(f"Excel Okuma Hatası: {e}")
-            return []
 
     workers = []
     seen_tcs = set()
 
-    # 2. Akıllı Hücre Taraması
-    for row in raw_rows:
-        if not any(row):
-            continue
-            
-        tckn_found = ""
-        tckn_col_idx = -1
+    def norm(txt):
+        return str(txt).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
+
+    for raw_rows in all_sheet_rows:
+        # A) DENE: Başlık (Header) Satırı Tespiti
+        col_tc_idx = -1
+        col_name_idx = -1
+        col_surname_idx = -1
+        col_fullname_idx = -1
+        header_row_idx = -1
         
-        # Satırdaki hücrelerde 11 haneli geçerli TC No arama
-        for col_idx, cell_val in enumerate(row):
-            cand = smart_extract_tckn(cell_val)
-            if cand and cand not in seen_tcs:
-                tckn_found = cand
-                tckn_col_idx = col_idx
+        for r_idx, row in enumerate(raw_rows[:15]):  # İlk 15 satırda başlık ara
+            normalized_cells = [norm(c) for c in row]
+            for c_idx, nc in enumerate(normalized_cells):
+                if any(k in nc for k in ["tc", "tckn", "kimlik"]):
+                    col_tc_idx = c_idx
+                elif any(k in nc for k in ["ad soyad", "ad soyadi", "adi soyadi", "isim soyisim", "full_name"]):
+                    col_fullname_idx = c_idx
+                elif nc in ["ad", "adi", "isim", "isım", "first_name", "name"]:
+                    col_name_idx = c_idx
+                elif nc in ["soyad", "soyadi", "soyisim", "surname", "last_name"]:
+                    col_surname_idx = c_idx
+                    
+            if col_tc_idx != -1 and (col_fullname_idx != -1 or col_name_idx != -1 or col_surname_idx != -1):
+                header_row_idx = r_idx
                 break
+
+        # Eğer başlıklar bulunduysa doğrudan başlık kolonlarından çek
+        if header_row_idx != -1:
+            for r_idx, row in enumerate(raw_rows[header_row_idx + 1:], start=header_row_idx + 1):
+                if not any(row):
+                    continue
+                    
+                tckn_val = row[col_tc_idx] if col_tc_idx < len(row) else ""
+                tckn_cand = smart_extract_tckn(tckn_val)
                 
-        if not tckn_found:
-            continue
+                if tckn_cand and tckn_cand not in seen_tcs:
+                    name_str = ""
+                    surname_str = ""
+                    
+                    if col_fullname_idx != -1 and col_fullname_idx < len(row):
+                        full = str(row[col_fullname_idx]).strip()
+                        parts = full.split()
+                        if len(parts) >= 2:
+                            surname_str = parts[-1]
+                            name_str = " ".join(parts[:-1])
+                        else:
+                            name_str = full
+                    else:
+                        if col_name_idx != -1 and col_name_idx < len(row):
+                            name_str = str(row[col_name_idx]).strip()
+                        if col_surname_idx != -1 and col_surname_idx < len(row):
+                            surname_str = str(row[col_surname_idx]).strip()
+                            
+                    workers.append({
+                        "name": name_str.strip() or "İŞÇİ",
+                        "surname": surname_str.strip() or f"({tckn_cand[-4:]})",
+                        "tckn": tckn_cand
+                    })
+                    seen_tcs.add(tckn_cand)
+
+        # B) DENE / TAMAMLAMA: Genel Hücre Tarama (Başlıksız veya kaçan satırlar için)
+        for row in raw_rows:
+            if not any(row):
+                continue
+                
+            tckn_found = ""
+            tc_idx_in_row = -1
             
-        # TC Numarası bulundu! Şimdi aynı satırdaki diğer hücrelerden İsim/Soyisim çıkarma
-        text_candidates = []
-        for col_idx, cell_val in enumerate(row):
-            if col_idx == tckn_col_idx:
+            for c_idx, cell_val in enumerate(row):
+                cand = smart_extract_tckn(cell_val)
+                if cand and cand not in seen_tcs:
+                    tckn_found = cand
+                    tc_idx_in_row = c_idx
+                    break
+                    
+            if not tckn_found:
                 continue
                 
-            val_str = str(cell_val).strip()
-            if not val_str:
-                continue
-                
-            # Sadece rakamlardan oluşan hücreleri ele (Sıra no, telefon, id vb.)
-            if val_str.isdigit() or val_str.replace('.', '', 1).isdigit():
-                continue
-                
-            val_upper = val_str.upper()
-            if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "T.C. KİMLİK NO", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "PERSONEL", "NOT", "ACİL", "DURUM", "AÇIKLAMA"]:
-                continue
-                
-            text_candidates.append(val_str)
+            text_candidates = []
+            for c_idx, cell_val in enumerate(row):
+                if c_idx == tc_idx_in_row:
+                    continue
+                    
+                val_str = str(cell_val).strip()
+                if not val_str:
+                    continue
+                    
+                # Başındaki "1-", "2.", "3)" gibi sıra numaralarını temizle
+                clean_text = re.sub(r'^\d+[\s\.\-\)]*', '', val_str).strip()
+                if not clean_text:
+                    continue
+                    
+                # Sadece sayıdan oluşan hücreleri ele
+                if clean_text.isdigit() or clean_text.replace('.', '', 1).isdigit():
+                    continue
+                    
+                val_upper = clean_text.upper()
+                if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "T.C. KİMLİK NO", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "PERSONEL", "NOT", "ACİL", "DURUM", "AÇIKLAMA"]:
+                    continue
+                    
+                text_candidates.append(clean_text)
 
-        name = ""
-        surname = ""
-        
-        # 1. Öncelik: "AHMET YILMAZ" gibi tek hücrede ad soyadı birleşmiş metin var mı?
-        multi_word_cells = [c for c in text_candidates if len(c.split()) >= 2]
-        if multi_word_cells:
-            target = multi_word_cells[0]
-            parts = target.split()
-            surname = parts[-1]
-            name = " ".join(parts[:-1])
-        elif len(text_candidates) >= 2:
-            name = text_candidates[0]
-            surname = text_candidates[1]
-        elif len(text_candidates) == 1:
-            name = text_candidates[0]
+            name = ""
             surname = ""
-        else:
-            name = "İŞÇİ"
-            surname = f"({tckn_found[-4:]})"
+            
+            multi_word_cells = [c for c in text_candidates if len(c.split()) >= 2]
+            if multi_word_cells:
+                target = multi_word_cells[0]
+                parts = target.split()
+                surname = parts[-1]
+                name = " ".join(parts[:-1])
+            elif len(text_candidates) >= 2:
+                name = text_candidates[0]
+                surname = text_candidates[1]
+            elif len(text_candidates) == 1:
+                name = text_candidates[0]
+                surname = ""
+            else:
+                name = "İŞÇİ"
+                surname = f"({tckn_found[-4:]})"
 
-        workers.append({
-            "name": name.strip(),
-            "surname": surname.strip(),
-            "tckn": tckn_found
-        })
-        seen_tcs.add(tckn_found)
+            workers.append({
+                "name": name.strip(),
+                "surname": surname.strip(),
+                "tckn": tckn_found
+            })
+            seen_tcs.add(tckn_found)
 
     return workers
+
 
 
 
