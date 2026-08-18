@@ -106,3 +106,76 @@ def create_printable_badge(name: str, surname: str, tckn: str) -> Image.Image:
     
     return card
 
+
+def create_grid_printable_pages(workers: list[tuple[str, str, str]], items_per_row: int = 3, rows_per_page: int = 4) -> list[Image.Image]:
+    """
+    Birden fazla işçi için A4 sayfasına yan yana 3'lü dizilimde kağıt tasarrufu sağlayan
+    yazdırılabilir A4 sayfa görselleri oluşturur (2480 x 3508 px - 300 DPI).
+    """
+    if not workers:
+        return []
+        
+    page_width, page_height = 2480, 3508
+    margin_x = 115
+    margin_y = 100
+    gap_x = 30
+    gap_y = 40
+    
+    cell_w = 740
+    cell_h = 770
+    
+    capacity_per_page = items_per_row * rows_per_page
+    pages = []
+    
+    try:
+        font_name = ImageFont.truetype("arialbd.ttf", 36)
+    except IOError:
+        try:
+            font_name = ImageFont.truetype("arial.ttf", 36)
+        except IOError:
+            font_name = ImageFont.load_default()
+
+    current_page = None
+    draw = None
+    
+    for idx, (name, surname, tckn) in enumerate(workers):
+        pos_in_page = idx % capacity_per_page
+        
+        # Yeni sayfa başlatma
+        if pos_in_page == 0:
+            current_page = Image.new("RGB", (page_width, page_height), "white")
+            draw = ImageDraw.Draw(current_page)
+            pages.append(current_page)
+            
+        row = pos_in_page // items_per_row
+        col = pos_in_page % items_per_row
+        
+        x = margin_x + col * (cell_w + gap_x)
+        y = margin_y + row * (cell_h + gap_y)
+        
+        # Kesim çizgisi (Hafif gri kesikli dış çerçeve)
+        draw.rectangle([(x, y), (x + cell_w, y + cell_h)], outline="#CBD5E1", width=2)
+        
+        # QR Kod üretme
+        qr_img = generate_qr_image(tckn, box_size=12, border=2)
+        qr_w, qr_h = qr_img.size
+        
+        qr_x = x + (cell_w - qr_w) // 2
+        qr_y = y + 30
+        current_page.paste(qr_img, (qr_x, qr_y))
+        
+        # Ad Soyad Metni
+        full_name = f"{name.upper()} {surname.upper()}".strip()
+        if not full_name:
+            full_name = "-"
+            
+        bbox = draw.textbbox((0, 0), full_name, font=font_name)
+        text_w = bbox[2] - bbox[0]
+        text_x = x + (cell_w - text_w) // 2
+        text_y = qr_y + qr_h + 25
+        
+        draw.text((text_x, text_y), full_name, fill="#000000", font=font_name)
+
+    return pages
+
+

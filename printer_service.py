@@ -97,3 +97,66 @@ def print_image_to_printer(image: Image.Image, printer_name: str = None) -> tupl
             return True, "Yazdırma penceresi açıldı."
         except Exception as alt_err:
             return False, f"Yazdırma hatası: {str(e)} / {str(alt_err)}"
+
+
+def print_images_to_printer(images: list[Image.Image], printer_name: str = None) -> tuple[bool, str]:
+    """
+    Birden fazla sayfa görselini (PIL Image listesi) seçilen yazıcıya tek bir yazdırma işi olarak gönderir.
+    """
+    if not images:
+        return False, "Yazdırılacak sayfa görseli bulunamadı."
+        
+    if not printer_name:
+        printer_name = get_default_printer()
+        
+    if not printer_name:
+        return False, "Sistemde kullanılabilir varsayılan bir yazıcı bulunamadı."
+        
+    try:
+        hDC = win32ui.CreateDC()
+        hDC.CreatePrinterDC(printer_name)
+        
+        printable_width = hDC.GetDeviceCaps(win32con.HORZRES)
+        printable_height = hDC.GetDeviceCaps(win32con.VERTRES)
+        
+        hDC.StartDoc(f"İşçi QR Kodları Yazdırma İşlemi ({len(images)} Sayfa)")
+        
+        for img in images:
+            hDC.StartPage()
+            
+            img_w, img_h = img.size
+            aspect_ratio = img_w / img_h
+            
+            target_w = printable_width
+            target_h = int(target_w / aspect_ratio)
+            
+            if target_h > printable_height:
+                target_h = printable_height
+                target_w = int(target_h * aspect_ratio)
+                
+            x1 = (printable_width - target_w) // 2
+            y1 = (printable_height - target_h) // 2
+            x2 = x1 + target_w
+            y2 = y1 + target_h
+            
+            dib = ImageWin.Dib(img)
+            dib.draw(hDC.GetHandleOutput(), (x1, y1, x2, y2))
+            
+            hDC.EndPage()
+            
+        hDC.EndDoc()
+        hDC.DeleteDC()
+        
+        return True, f"Toplam {len(images)} sayfa başarıyla '{printer_name}' yazıcısına gönderildi."
+        
+    except Exception as e:
+        try:
+            temp_dir = tempfile.gettempdir()
+            for idx, img in enumerate(images):
+                temp_path = os.path.join(temp_dir, f"temp_qr_page_{idx}.png")
+                img.save(temp_path)
+                os.startfile(temp_path, "print")
+            return True, f"Yazdırma pencereleri açıldı ({len(images)} sayfa)."
+        except Exception as alt_err:
+            return False, f"Yazdırma hatası: {str(e)} / {str(alt_err)}"
+

@@ -188,7 +188,7 @@ class QRCodeApp:
         table_frame.pack(fill="both", expand=True)
         
         columns = ("id", "name", "surname", "tckn", "created_at")
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="extended")
         
         self.tree.heading("id", text="ID")
         self.tree.heading("name", text="Adı")
@@ -214,7 +214,7 @@ class QRCodeApp:
         bottom_btn_frame = ttk.Frame(right_card, style="Card.TFrame")
         bottom_btn_frame.pack(fill="x", pady=(10, 0))
         
-        btn_print_selected = ttk.Button(bottom_btn_frame, text="🖨️ Seçileni Yazdır", command=self.action_print_selected)
+        btn_print_selected = ttk.Button(bottom_btn_frame, text="🖨️ Seçilenleri Yazdır (3'lü Izgara)", command=self.action_print_selected)
         btn_print_selected.pack(side="left", padx=(0, 5))
         
         btn_import_excel = ttk.Button(bottom_btn_frame, text="📂 Excel/CSV'den Aktar", command=self.action_import_excel)
@@ -382,17 +382,33 @@ class QRCodeApp:
         self.open_printer_select_dialog(self.current_badge_image)
 
     def action_print_selected(self):
-        """Tabloda seçili işçinin QR kartını yazdırır."""
+        """Tabloda seçili işçilerin QR kartlarını 3'lü dizilimde A4 sayfasına yerleştirip yazdırır."""
         selected = self.tree.selection()
         if not selected:
-            messagebox.showwarning("Uyarı", "Lütfen önce tablodan yazdırılacak işçiyi seçiniz.")
+            messagebox.showwarning("Uyarı", "Lütfen önce tablodan yazdırılacak en az 1 işçi seçiniz.\n(Birden fazla seçim için Ctrl veya Shift tuşunu kullanabilirsiniz).")
             return
             
-        self.on_tree_select(None)
-        self.action_print_current()
+        workers = []
+        for item in selected:
+            item_values = self.tree.item(item, "values")
+            if item_values:
+                _, name, surname, tckn, _ = item_values
+                workers.append((name, surname, str(tckn)))
+                
+        if len(workers) == 1:
+            name, surname, tckn = workers[0]
+            badge_img = qr_generator.create_printable_badge(name, surname, tckn)
+            self.display_preview(badge_img)
+            self.open_printer_select_dialog(badge_img)
+        else:
+            # 3'lü dizilimde A4 sayfaları oluştur
+            pages = qr_generator.create_grid_printable_pages(workers, items_per_row=3)
+            if pages:
+                self.display_preview(pages[0])
+                self.open_printer_select_dialog(pages)
 
-    def open_printer_select_dialog(self, image_to_print: Image.Image):
-        """Kullanıcının bilgisayarındaki yazıcıları listeleyen pencere açar."""
+    def open_printer_select_dialog(self, print_target):
+        """Kullanıcının bilgisayarındaki yazıcıları listeleyen pencere açar (Tek görsel veya çoklu sayfa)."""
         printers = printer_service.get_installed_printers()
         default_p = printer_service.get_default_printer()
         
@@ -422,7 +438,9 @@ class QRCodeApp:
         elif printers:
             combo_printers.set(printers[0])
 
-        info_lbl = ttk.Label(dialog, text="Görsel otomatik olarak yazıcı sayfasına sığdırılacaktır.", font=("Segoe UI", 9), foreground="#64748B")
+        is_multi = isinstance(print_target, list)
+        page_info_text = f"Toplam {len(print_target)} sayfa 3'lü dizilimde yazdırılacaktır." if is_multi else "Görsel yazıcı sayfasına sığdırılacaktır."
+        info_lbl = ttk.Label(dialog, text=page_info_text, font=("Segoe UI", 9), foreground="#64748B")
         info_lbl.pack(pady=5)
 
         def start_printing():
@@ -434,7 +452,11 @@ class QRCodeApp:
             dialog.destroy()
             self.set_status(f"Yazdırılıyor... ({selected_printer})")
             
-            success, msg = printer_service.print_image_to_printer(image_to_print, selected_printer)
+            if is_multi:
+                success, msg = printer_service.print_images_to_printer(print_target, selected_printer)
+            else:
+                success, msg = printer_service.print_image_to_printer(print_target, selected_printer)
+                
             if success:
                 messagebox.showinfo("Başarılı", f"Yazdırma işlemi tamamlandı:\n{msg}")
                 self.set_status(f"Yazdırıldı: {selected_printer}")
@@ -487,7 +509,7 @@ class QRCodeApp:
             self.refresh_worker_list()
 
     def action_import_excel(self):
-        """Excel veya CSV dosyasından toplu işçi aktarır."""
+        """Excel veya CSV dosyasından esnek kolon eşleme ile toplu işçi aktarır."""
         filepath = filedialog.askopenfilename(filetypes=[("Excel / CSV Dosyaları", "*.xlsx *.csv"), ("Tüm Dosyalar", "*.*")])
         if not filepath:
             return
@@ -496,34 +518,44 @@ class QRCodeApp:
             imported_count = 0
             skipped_count = 0
             
+            rows = []
             if filepath.endswith(".csv"):
                 import csv
                 with open(filepath, mode="r", encoding="utf-8-sig") as f:
                     reader = csv.DictReader(f)
-                    rows = list(reader)
+                    rows = [dict(r) for r in reader]
             else:
                 import openpyxl
-                wb = openpyxl.load_workbook(filepath)
+                wb = openpyxl.load_workbook(filepath, data_only=True)
                 sheet = wb.active
-                rows = []
-                headers = [str(cell.value).strip().lower() if cell.value else "" for cell in sheet[1]]
+                headers = [str(cell.value).strip() if cell.value is not None else "" for cell in sheet[1]]
                 for row in sheet.iter_rows(min_row=2, values_only=True):
                     row_dict = {}
                     for idx, val in enumerate(row):
-                        if idx < len(headers):
+                        if idx < len(headers) and headers[idx]:
                             row_dict[headers[idx]] = str(val).strip() if val is not None else ""
-                    rows.append(row_dict)
+                    if any(row_dict.values()):
+                        rows.append(row_dict)
                     
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             
+            def norm(k):
+                return str(k).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
+
             for r in rows:
-                # Kolon isimleri esnek eşleme
-                name = r.get("ad") or r.get("adı") or r.get("name") or r.get("first_name") or ""
-                surname = r.get("soyad") or r.get("soyadı") or r.get("surname") or r.get("last_name") or ""
-                tckn = r.get("tc") or r.get("tckn") or r.get("tc_no") or r.get("tc kimlik") or ""
+                name, surname, tckn = "", "", ""
                 
+                for k, v in r.items():
+                    nk = norm(k)
+                    if nk in ["ad", "adi", "isim", "isım", "name", "first_name", "first name"]:
+                        name = str(v).strip()
+                    elif nk in ["soyad", "soyadi", "soyisim", "soyısım", "surname", "last_name", "last name"]:
+                        surname = str(v).strip()
+                    elif nk in ["tc", "tckn", "tcno", "tc_no", "tc kimlik", "tc_kimlik", "tc kimlik no", "tc_kimlik_no"]:
+                        tckn = str(v).strip().split(".")[0]  # Excel sayılarından .0 temizleme
+
                 is_valid, _ = qr_generator.validate_tckn(tckn)
                 if is_valid:
                     try:
