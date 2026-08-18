@@ -222,7 +222,7 @@ def smart_extract_tckn(cell_value) -> str:
 def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
     """
     Satır, sütun veya sayfa yeri ne olursa olsun Excel / CSV dosyasındaki TÜM işçileri
-    (Ad, Soyad, TC No) hibrit (Başlık + Hücre Tarama) algoritmasıyla eksiksiz çıkarır.
+    (Ad, Soyad, TC No) tam doğrulukla çıkarır.
     """
     all_sheet_rows = []
     
@@ -270,105 +270,46 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
     workers = []
     seen_tcs = set()
 
-    def norm(txt):
-        return str(txt).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
-
     for raw_rows in all_sheet_rows:
-        # A) DENE: Başlık (Header) Satırı Tespiti
-        col_tc_idx = -1
-        col_name_idx = -1
-        col_surname_idx = -1
-        col_fullname_idx = -1
-        header_row_idx = -1
-        
-        for r_idx, row in enumerate(raw_rows[:15]):  # İlk 15 satırda başlık ara
-            normalized_cells = [norm(c) for c in row]
-            for c_idx, nc in enumerate(normalized_cells):
-                if any(k in nc for k in ["tc", "tckn", "kimlik"]):
-                    col_tc_idx = c_idx
-                elif any(k in nc for k in ["ad soyad", "ad soyadi", "adi soyadi", "isim soyisim", "full_name"]):
-                    col_fullname_idx = c_idx
-                elif nc in ["ad", "adi", "isim", "isım", "first_name", "name"]:
-                    col_name_idx = c_idx
-                elif nc in ["soyad", "soyadi", "soyisim", "surname", "last_name"]:
-                    col_surname_idx = c_idx
-                    
-            if col_tc_idx != -1 and (col_fullname_idx != -1 or col_name_idx != -1 or col_surname_idx != -1):
-                header_row_idx = r_idx
-                break
-
-        # Eğer başlıklar bulunduysa doğrudan başlık kolonlarından çek
-        if header_row_idx != -1:
-            for r_idx, row in enumerate(raw_rows[header_row_idx + 1:], start=header_row_idx + 1):
-                if not any(row):
-                    continue
-                    
-                tckn_val = row[col_tc_idx] if col_tc_idx < len(row) else ""
-                tckn_cand = smart_extract_tckn(tckn_val)
-                
-                if tckn_cand and tckn_cand not in seen_tcs:
-                    name_str = ""
-                    surname_str = ""
-                    
-                    if col_fullname_idx != -1 and col_fullname_idx < len(row):
-                        full = str(row[col_fullname_idx]).strip()
-                        parts = full.split()
-                        if len(parts) >= 2:
-                            surname_str = parts[-1]
-                            name_str = " ".join(parts[:-1])
-                        else:
-                            name_str = full
-                    else:
-                        if col_name_idx != -1 and col_name_idx < len(row):
-                            name_str = str(row[col_name_idx]).strip()
-                        if col_surname_idx != -1 and col_surname_idx < len(row):
-                            surname_str = str(row[col_surname_idx]).strip()
-                            
-                    workers.append({
-                        "name": name_str.strip() or "İŞÇİ",
-                        "surname": surname_str.strip() or f"({tckn_cand[-4:]})",
-                        "tckn": tckn_cand
-                    })
-                    seen_tcs.add(tckn_cand)
-
-        # B) DENE / TAMAMLAMA: Genel Hücre Tarama (Başlıksız veya kaçan satırlar için)
         for row in raw_rows:
             if not any(row):
                 continue
                 
             tckn_found = ""
-            tc_idx_in_row = -1
+            tc_col_idx = -1
             
-            for c_idx, cell_val in enumerate(row):
+            # Satırda 11 haneli TC Kimlik / YKN ara
+            for col_idx, cell_val in enumerate(row):
                 cand = smart_extract_tckn(cell_val)
                 if cand and cand not in seen_tcs:
                     tckn_found = cand
-                    tc_idx_in_row = c_idx
+                    tc_col_idx = col_idx
                     break
                     
             if not tckn_found:
                 continue
                 
+            # TC bulundu! Şimdi aynı satırdaki diğer hücrelerden Ad ve Soyad çıkar
             text_candidates = []
-            for c_idx, cell_val in enumerate(row):
-                if c_idx == tc_idx_in_row:
+            for col_idx, cell_val in enumerate(row):
+                if col_idx == tc_col_idx:
                     continue
                     
                 val_str = str(cell_val).strip()
                 if not val_str:
                     continue
                     
-                # Başındaki "1-", "2.", "3)" gibi sıra numaralarını temizle
+                # Sıra no temizliği ("1.", "1-", "2)" vb.)
                 clean_text = re.sub(r'^\d+[\s\.\-\)]*', '', val_str).strip()
                 if not clean_text:
                     continue
                     
-                # Sadece sayıdan oluşan hücreleri ele
+                # Sadece sayıdan veya float sayıdan oluşan verileri (Sıra no, tarih, yaş, maaş) atla
                 if clean_text.isdigit() or clean_text.replace('.', '', 1).isdigit():
                     continue
                     
                 val_upper = clean_text.upper()
-                if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "T.C. KİMLİK NO", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "PERSONEL", "NOT", "ACİL", "DURUM", "AÇIKLAMA"]:
+                if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "T.C. KİMLİK NO", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "PERSONEL", "NOT", "ACİL", "DURUM", "AÇIKLAMA", "TARİH", "KAYIT"]:
                     continue
                     
                 text_candidates.append(clean_text)
@@ -376,6 +317,7 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
             name = ""
             surname = ""
             
+            # Öncelik 1: İki veya daha fazla kelimeden oluşan isim hücresi (Örn: "Ahmet Yılmaz" veya "Mehmet Ali Kaya")
             multi_word_cells = [c for c in text_candidates if len(c.split()) >= 2]
             if multi_word_cells:
                 target = multi_word_cells[0]
@@ -400,6 +342,7 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
             seen_tcs.add(tckn_found)
 
     return workers
+
 
 
 
