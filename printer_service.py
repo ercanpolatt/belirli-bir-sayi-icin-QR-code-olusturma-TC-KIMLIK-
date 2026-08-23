@@ -35,7 +35,7 @@ def get_default_printer() -> str:
         return ""
 
 
-def print_image_to_printer(image: Image.Image, printer_name: str = None) -> tuple[bool, str]:
+def print_image_to_printer(image: Image.Image, printer_name: str = None, doc_name: str = "İşçi QR/Barkod Kartı") -> tuple[bool, str]:
     """
     Verilen PIL Image görselini seçilen yazıcıya doğrudan gönderir.
     Yazıcı ismi verilmezse varsayılan yazıcıyı kullanır.
@@ -74,7 +74,7 @@ def print_image_to_printer(image: Image.Image, printer_name: str = None) -> tupl
         y2 = y1 + target_h
         
         # Yazdırma işini başlatma
-        hDC.StartDoc("İşçi QR Kodu Yazdırma İşlemi")
+        hDC.StartDoc(doc_name)
         hDC.StartPage()
         
         # PIL Image'i Windows Dib (Device Independent Bitmap) formatına çevirme
@@ -91,7 +91,7 @@ def print_image_to_printer(image: Image.Image, printer_name: str = None) -> tupl
         # Hata durumunda alternatif yöntem: Geçici dosyaya kaydedip Windows shell print çağırma
         try:
             temp_dir = tempfile.gettempdir()
-            temp_path = os.path.join(temp_dir, "temp_qr_badge.png")
+            temp_path = os.path.join(temp_dir, "temp_code_badge.png")
             image.save(temp_path)
             os.startfile(temp_path, "print")
             return True, "Yazdırma penceresi açıldı."
@@ -99,7 +99,7 @@ def print_image_to_printer(image: Image.Image, printer_name: str = None) -> tupl
             return False, f"Yazdırma hatası: {str(e)} / {str(alt_err)}"
 
 
-def print_images_to_printer(images: list[Image.Image], printer_name: str = None) -> tuple[bool, str]:
+def print_images_to_printer(images: list[Image.Image], printer_name: str = None, doc_name: str = None) -> tuple[bool, str]:
     """
     Birden fazla sayfa görselini (PIL Image listesi) seçilen yazıcıya tek bir yazdırma işi olarak gönderir.
     """
@@ -119,7 +119,8 @@ def print_images_to_printer(images: list[Image.Image], printer_name: str = None)
         printable_width = hDC.GetDeviceCaps(win32con.HORZRES)
         printable_height = hDC.GetDeviceCaps(win32con.VERTRES)
         
-        hDC.StartDoc(f"İşçi QR Kodları Yazdırma İşlemi ({len(images)} Sayfa)")
+        job_title = doc_name or f"İşçi Kartları Yazdırma İşlemi ({len(images)} Sayfa)"
+        hDC.StartDoc(job_title)
         
         for img in images:
             hDC.StartPage()
