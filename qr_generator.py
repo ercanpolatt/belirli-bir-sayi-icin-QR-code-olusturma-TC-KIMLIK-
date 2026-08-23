@@ -1,16 +1,21 @@
 """
-QR Kod & Barkod Üretimi ve Esnek Kod/TC Doğrulama Modülü
-Desteklenen formatlar: QR Kod, 1D Barkod (Code 128, Code 39), Kombine (QR + Barkod)
+QR Kod & Barkod Üretimi, Excel Entegrasyonu ve Pano Servisi
+Desteklenen formatlar: QR Kod, 1D Barkod (Code 128, Code 39, EAN-13), Kombine (QR + Barkod)
 Serbest metin, alfanümerik kod, seri numarası veya TC Kimlik Numarası ile çalışır.
 """
 import os
 import re
 import csv
+import io
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
 import barcode
 from barcode.writer import ImageWriter
+import win32clipboard
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 
 def get_system_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
@@ -30,6 +35,29 @@ def get_system_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
         except IOError:
             continue
     return ImageFont.load_default()
+
+
+def copy_image_to_clipboard(pil_image: Image.Image) -> bool:
+    """
+    Verilen PIL Image görselini doğrudan Windows panosuna (Clipboard) kopyalar.
+    Böylece kullanıcı Excel, Word veya Paint'e geçip Ctrl+V ile görseli doğrudan yapıştırabilir.
+    """
+    if pil_image is None:
+        return False
+    try:
+        output = io.BytesIO()
+        pil_image.convert("RGB").save(output, "BMP")
+        data = output.getvalue()[14:]  # 14 byte BMP dosya başlığını çıkarıp CF_DIB formatı oluştur
+        output.close()
+        
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        win32clipboard.CloseClipboard()
+        return True
+    except Exception as e:
+        print(f"Pano görsel kopyalama hatası: {e}")
+        return False
 
 
 def sanitize_for_barcode(text: str, barcode_type: str = "code128") -> str:
@@ -103,7 +131,6 @@ def validate_code_value(code_val: str, strict_tckn: bool = False) -> tuple[bool,
     if strict_tckn:
         return validate_tckn(code_val)
         
-    # Serbest mod: Eğer 11 haneli rakamsa TC kontrolü sonucunu bilgi olarak ver
     if len(code_val) == 11 and code_val.isdigit():
         is_tckn, _ = validate_tckn(code_val)
         if is_tckn:
@@ -142,7 +169,7 @@ def generate_barcode_image(
 ) -> Image.Image:
     """
     Herhangi bir sayı, harf veya seri numarası için 1D çizgi barkod üretir.
-    - barcode_type: "code128" (varsayılan) veya "code39"
+    - barcode_type: "code128" (varsayılan), "code39"
     """
     raw_str = str(data).strip()
     clean_str = sanitize_for_barcode(raw_str, barcode_type=barcode_type)
@@ -243,7 +270,6 @@ def create_printable_badge(
         draw.line([(60, start_y + 40), (width - 60, start_y + 40)], fill="#E2E8F0", width=2)
         start_y += 55
 
-    # Kod alt metni etiketi (11 haneli rakamsa TCKN, değilse KOD)
     label_prefix = "TCKN" if (len(code_str) == 11 and code_str.isdigit()) else "KOD"
 
     # 1. YALNIZCA QR KOD MODU
@@ -532,7 +558,6 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
         if sheet_rows:
             all_sheet_rows.append(sheet_rows)
     else:
-        import openpyxl
         try:
             wb = openpyxl.load_workbook(filepath, data_only=True)
             for sheet in wb.worksheets:
@@ -557,6 +582,36 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
         except Exception as e:
             print(f"Excel Okuma Hatası: {e}")
 
+    return parse_raw_grid_rows(all_sheet_rows)
+
+
+def parse_clipboard_table_text(text: str) -> list[dict]:
+    """
+    Excel'den kopyalanmış sekmeli (TSV) veya virgüllü/noktalı virgüllü metinleri ayrıştırır.
+    """
+    if not text or not text.strip():
+        return []
+        
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    grid = []
+    for line in lines:
+        if "\t" in line:
+            parts = [p.strip() for p in line.split("\t")]
+        elif ";" in line:
+            parts = [p.strip() for p in line.split(";")]
+        elif "," in line:
+            parts = [p.strip() for p in line.split(",")]
+        else:
+            parts = [line.strip()]
+        grid.append(parts)
+        
+    return parse_raw_grid_rows([grid])
+
+
+def parse_raw_grid_rows(all_sheet_rows: list[list[list[str]]]) -> list[dict]:
+    """
+    Ham satır/hücre listesinden İsim, Soyisim ve Kod/TC kayıtlarını üretir.
+    """
     workers = []
     seen_codes = set()
 
@@ -580,11 +635,13 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
             if not code_found:
                 for col_idx, cell_val in enumerate(row):
                     val_str = str(cell_val).strip()
-                    if val_str and val_str not in seen_codes and len(val_str) >= 2:
-                        if any(c.isdigit() for c in val_str):
-                            code_found = val_str
-                            code_col_idx = col_idx
-                            break
+                    if val_str and val_str not in seen_codes and len(val_str) >= 1:
+                        val_upper = val_str.upper()
+                        if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "KOD", "BARKOD", "BARCODE", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "ID", "TARİH"]:
+                            continue
+                        code_found = val_str
+                        code_col_idx = col_idx
+                        break
                             
             if not code_found:
                 continue
@@ -606,7 +663,7 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
                     continue
                     
                 val_upper = clean_text.upper()
-                if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "KOD", "BARKOD", "BARCODE", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA"]:
+                if val_upper in ["TC", "TCKN", "TC NO", "T.C.", "KOD", "BARKOD", "BARCODE", "AD", "SOYAD", "AD SOYAD", "İSİM", "SOYİSİM", "SIRA NO", "NO", "SIRA", "ID", "TARİH"]:
                     continue
                     
                 text_candidates.append(clean_text)
@@ -627,8 +684,8 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
                 name = text_candidates[0]
                 surname = ""
             else:
-                name = "KAYIT"
-                surname = f"({code_found[-4:] if len(code_found) >= 4 else code_found})"
+                name = ""
+                surname = ""
 
             workers.append({
                 "name": name.strip(),
@@ -638,3 +695,87 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
             seen_codes.add(code_found)
 
     return workers
+
+
+def export_records_to_excel(records: list[tuple], filepath: str):
+    """
+    Kayıt listesini şık biçimlendirilmiş bir .xlsx Excel tablosu olarak kaydeder.
+    records: list of (id, name, surname, code_val, created_at)
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Barkod Listesi"
+    
+    headers = ["Sıra / ID", "İsim / Başlık", "Soyisim / Detay", "Barkod / Kod Değeri", "Kayıt Tarihi"]
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+    
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+    
+    for r_idx, row in enumerate(records, start=2):
+        for c_idx, val in enumerate(row, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=str(val))
+            cell.font = Font(name="Segoe UI", size=10)
+            cell.border = thin_border
+            if c_idx in [1, 4, 5]:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+                
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+        
+    wb.save(filepath)
+
+
+def generate_sequential_codes(
+    start_num: int,
+    count: int,
+    prefix: str = "",
+    suffix: str = "",
+    pad_length: int = 0,
+    name_template: str = "",
+    surname_template: str = ""
+) -> list[dict]:
+    """
+    Belirlenen aralıkta sıralı/seri barkod ve kod listesi oluşturur.
+    Örn: prefix="URUN-", start_num=1, count=50, pad_length=4 -> URUN-0001 ... URUN-0050
+    """
+    items = []
+    for i in range(count):
+        cur_num = start_num + i
+        num_str = str(cur_num)
+        if pad_length > len(num_str):
+            num_str = num_str.zfill(pad_length)
+            
+        full_code = f"{prefix}{num_str}{suffix}"
+        
+        name = name_template
+        if "{no}" in name:
+            name = name.replace("{no}", str(cur_num))
+            
+        surname = surname_template
+        if "{no}" in surname:
+            surname = surname.replace("{no}", str(cur_num))
+            
+        items.append({
+            "name": name.strip(),
+            "surname": surname.strip(),
+            "tckn": full_code
+        })
+    return items

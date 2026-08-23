@@ -1,5 +1,5 @@
 """
-İşçi TC Kimlik & Özel Kod / Barkod Oluşturma & Yazdırma Uygulaması
+İşçi TC Kimlik & Özel Kod / Barkod Oluşturma, Yazdırma ve Excel Entegrasyon Uygulaması
 Ana Kullanıcı Arayüzü (GUI)
 """
 import sys
@@ -19,9 +19,9 @@ import printer_service
 class QRCodeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("İşçi TC Kimlik & Özel Kod / Barkod Uygulaması")
-        self.root.geometry("1180x760")
-        self.root.minsize(1020, 680)
+        self.root.title("Barkod & QR Kod Oluşturma, Yazdırma ve Excel Entegrasyonu")
+        self.root.geometry("1240x780")
+        self.root.minsize(1060, 700)
         
         # Tema ve Stil Ayarları
         self.style = ttk.Style()
@@ -45,6 +45,7 @@ class QRCodeApp:
         
         # Ana Arayüz Bileşenleri
         self.build_ui()
+        self.bind_shortcuts()
         self.refresh_worker_list()
         self.update_printer_list()
 
@@ -71,6 +72,9 @@ class QRCodeApp:
         
         self.style.configure("Success.TButton", font=("Segoe UI", 9, "bold"), background="#059669", foreground="white")
         self.style.map("Success.TButton", background=[("active", "#047857")])
+
+        self.style.configure("Excel.TButton", font=("Segoe UI", 9, "bold"), background="#107C41", foreground="white")
+        self.style.map("Excel.TButton", background=[("active", "#0B5A2F")])
 
         self.style.configure("Action.TButton", font=("Segoe UI", 9), background="#E2E8F0", foreground="#0F172A")
         self.style.map("Action.TButton", background=[("active", "#CBD5E1")])
@@ -105,41 +109,41 @@ class QRCodeApp:
         header_frame = ttk.Frame(self.root, style="Header.TFrame", padding=(20, 12))
         header_frame.pack(fill="x", side="top")
         
-        ttk.Label(header_frame, text="KOD / BARKOD & QR KOD OLUŞTURMA VE YAZDIRMA", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(header_frame, text="Belirlediğiniz Sayı, Harf, Seri Numarası veya TC Kimlik ile 1D Çizgi Barkod & 2D Karekod Üretin", style="SubHeader.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(header_frame, text="BARKOD & QR KOD OLUŞTURMA, YAZDIRMA VE EXCEL ENTEGRASYONU", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(header_frame, text="Belirlediğiniz Sayı/Harf/TC ile Barkod Üretin, Excel'e Doğrudan Görsel/Hücre Kopyalayın ve Doğrudan Çıktı Alın", style="SubHeader.TLabel").pack(anchor="w", pady=(2, 0))
 
         # 2. Ana İçerik Alanı
         main_container = ttk.Frame(self.root, padding=12)
         main_container.pack(fill="both", expand=True)
         
         main_container.columnconfigure(0, weight=5)
-        main_container.columnconfigure(1, weight=6)
+        main_container.columnconfigure(1, weight=7)
         main_container.rowconfigure(0, weight=1)
 
         # ---------------- SOL PANEL (Form & Kod Seçimi & Canlı Önizleme) ----------------
         left_card = ttk.Frame(main_container, style="Card.TFrame", padding=12)
         left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         
-        ttk.Label(left_card, text="Kod Bilgileri ve Barkod Ayarları", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(left_card, text="Kod Bilgileri ve Barkod Ayarları", style="Title.TLabel").pack(anchor="w", pady=(0, 6))
         
         # Form Alanları
         form_frame = ttk.Frame(left_card, style="Card.TFrame")
         form_frame.pack(fill="x", pady=2)
         form_frame.columnconfigure(1, weight=1)
         
-        # Kod Değeri / Sayı / Harf (ZORUNLU ALAN)
+        # Kod Değeri / Sayı / Harf
         ttk.Label(form_frame, text="Barkod / Kod Değeri:", font=("Segoe UI", 9, "bold"), background="#FFFFFF", foreground="#1E293B").grid(row=0, column=0, sticky="w", pady=3)
         self.entry_tckn = ttk.Entry(form_frame, font=("Segoe UI", 10, "bold"))
         self.entry_tckn.grid(row=0, column=1, sticky="ew", pady=3, padx=(8, 0))
         self.entry_tckn.bind("<KeyRelease>", self.on_code_input)
 
-        # Adı (Opsiyonel)
+        # İsim / Başlık (Opsiyonel)
         ttk.Label(form_frame, text="İsim / Başlık (Opsiyonel):", style="Normal.TLabel").grid(row=1, column=0, sticky="w", pady=3)
         self.entry_name = ttk.Entry(form_frame, font=("Segoe UI", 9))
         self.entry_name.grid(row=1, column=1, sticky="ew", pady=3, padx=(8, 0))
         self.entry_name.bind("<KeyRelease>", lambda e: self.auto_refresh_preview())
         
-        # Soyadı (Opsiyonel)
+        # Soyisim / Detay (Opsiyonel)
         ttk.Label(form_frame, text="Soyisim / Ek Bilgi:", style="Normal.TLabel").grid(row=2, column=0, sticky="w", pady=3)
         self.entry_surname = ttk.Entry(form_frame, font=("Segoe UI", 9))
         self.entry_surname.grid(row=2, column=1, sticky="ew", pady=3, padx=(8, 0))
@@ -153,11 +157,11 @@ class QRCodeApp:
 
         # Doğrulama Mesaj Alanı
         self.lbl_status = ttk.Label(left_card, text="Barkod veya QR koda dönüştürülecek sayı/harf değerini giriniz.", font=("Segoe UI", 9), foreground="#64748B", background="#FFFFFF")
-        self.lbl_status.pack(anchor="w", pady=(4, 6))
+        self.lbl_status.pack(anchor="w", pady=(2, 6))
 
         # Kod Türü ve Seçenekler Çerçevesi
         code_type_frame = ttk.LabelFrame(left_card, text=" Kod Formatı ve Türü ", style="Card.TLabelframe", padding=(8, 6))
-        code_type_frame.pack(fill="x", pady=(0, 8))
+        code_type_frame.pack(fill="x", pady=(0, 6))
 
         modes_box = ttk.Frame(code_type_frame, style="Card.TFrame")
         modes_box.pack(fill="x")
@@ -168,65 +172,72 @@ class QRCodeApp:
         rb_qr = ttk.Radiobutton(modes_box, text="📱 QR Kod (2D)", value="qr", variable=self.var_code_mode, style="Card.TRadiobutton", command=self.on_mode_change)
         rb_qr.pack(side="left", padx=(0, 10))
 
-        rb_both = ttk.Radiobutton(modes_box, text="🔄 QR + Barkod (Kombine)", value="both", variable=self.var_code_mode, style="Card.TRadiobutton", command=self.on_mode_change)
+        rb_both = ttk.Radiobutton(modes_box, text="🔄 QR + Barkod", value="both", variable=self.var_code_mode, style="Card.TRadiobutton", command=self.on_mode_change)
         rb_both.pack(side="left")
 
         # Barkod İnce Ayar Satırı
         bc_opt_box = ttk.Frame(code_type_frame, style="Card.TFrame")
-        bc_opt_box.pack(fill="x", pady=(6, 0))
+        bc_opt_box.pack(fill="x", pady=(5, 0))
 
         ttk.Label(bc_opt_box, text="Standart:", style="Sub.TLabel").pack(side="left", padx=(0, 4))
         self.cb_bctype = ttk.Combobox(bc_opt_box, textvariable=self.var_barcode_type, values=["Code 128 (Tüm Sayı/Harf)", "Code 39"], state="readonly", width=18, font=("Segoe UI", 8))
         self.cb_bctype.current(0)
-        self.cb_bctype.pack(side="left", padx=(0, 10))
+        self.cb_bctype.pack(side="left", padx=(0, 8))
         self.cb_bctype.bind("<<ComboboxSelected>>", lambda e: self.on_mode_change())
 
-        chk_text = ttk.Checkbutton(bc_opt_box, text="Kod Metnini Göster", variable=self.var_show_barcode_text, style="Card.TCheckbutton", command=self.auto_refresh_preview)
-        chk_text.pack(side="left", padx=(0, 10))
+        chk_text = ttk.Checkbutton(bc_opt_box, text="Metni Göster", variable=self.var_show_barcode_text, style="Card.TCheckbutton", command=self.auto_refresh_preview)
+        chk_text.pack(side="left", padx=(0, 8))
 
-        chk_strict = ttk.Checkbutton(bc_opt_box, text="Sıkı TC Kontrolü", variable=self.var_strict_tckn, style="Card.TCheckbutton", command=self.on_strict_toggle)
+        chk_strict = ttk.Checkbutton(bc_opt_box, text="Sıkı TC", variable=self.var_strict_tckn, style="Card.TCheckbutton", command=self.on_strict_toggle)
         chk_strict.pack(side="left")
 
-        # Butonlar
+        # Butonlar Satırı
         btn_frame = ttk.Frame(left_card, style="Card.TFrame")
-        btn_frame.pack(fill="x", pady=(2, 8))
+        btn_frame.pack(fill="x", pady=(2, 6))
         
-        btn_generate = ttk.Button(btn_frame, text="✨ Barkod / Kod Oluştur", style="Primary.TButton", command=self.action_generate_code)
-        btn_generate.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        btn_generate = ttk.Button(btn_frame, text="✨ Barkod Oluştur", style="Primary.TButton", command=self.action_generate_code)
+        btn_generate.pack(side="left", fill="x", expand=True, padx=(0, 3))
         
-        btn_save_worker = ttk.Button(btn_frame, text="➕ Listeye Kaydet", style="Action.TButton", command=self.action_save_worker)
-        btn_save_worker.pack(side="left", fill="x", expand=True, padx=4)
+        btn_save_worker = ttk.Button(btn_frame, text="➕ Listeye Ekle", style="Action.TButton", command=self.action_save_worker)
+        btn_save_worker.pack(side="left", fill="x", expand=True, padx=3)
 
-        btn_copy_tc = ttk.Button(btn_frame, text="📋 Kodu Kopyala", style="Action.TButton", command=self.action_copy_tc)
-        btn_copy_tc.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        btn_copy_image = ttk.Button(btn_frame, text="🖼️ Görseli Kopyala", style="Excel.TButton", command=self.action_copy_image_to_clipboard)
+        btn_copy_image.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
         # Önizleme Kutu Alanı
-        ttk.Label(left_card, text="Kart & Baskı Önizlemesi", style="Title.TLabel").pack(anchor="w", pady=(2, 4))
+        preview_header_box = ttk.Frame(left_card, style="Card.TFrame")
+        preview_header_box.pack(fill="x", pady=(2, 2))
+        ttk.Label(preview_header_box, text="Kart & Baskı Önizlemesi", style="Title.TLabel").pack(side="left")
+        ttk.Label(preview_header_box, text="(Excel'e Ctrl+V ile yapıştırmak için Görseli Kopyala'ya basın)", font=("Segoe UI", 8), foreground="#64748B", background="#FFFFFF").pack(side="right")
         
         preview_border = tk.Frame(left_card, bg="#CBD5E1", bd=1)
-        preview_border.pack(fill="both", expand=True, pady=(0, 6))
+        preview_border.pack(fill="both", expand=True, pady=(0, 4))
         
         self.lbl_preview = tk.Label(preview_border, bg="#F8FAFC", text="Barkod / QR Kod Önizlemesi Burada Görünecektir")
         self.lbl_preview.pack(fill="both", expand=True)
         
-        # Yazdırma ve Dışa Aktarma Butonları
+        # Alt Hızlı İşlem Butonları
         print_action_frame = ttk.Frame(left_card, style="Card.TFrame")
         print_action_frame.pack(fill="x", pady=(2, 0))
         
         btn_print = ttk.Button(print_action_frame, text="🖨️ Yazıcı Seç ve Yazdır", style="Success.TButton", command=self.action_print_current)
-        btn_print.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        btn_print.pack(side="left", fill="x", expand=True, padx=(0, 3))
         
-        btn_export_png = ttk.Button(print_action_frame, text="💾 PNG Olarak Kaydet", style="Action.TButton", command=self.action_save_png)
-        btn_export_png.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        btn_export_png = ttk.Button(print_action_frame, text="💾 PNG Kaydet", style="Action.TButton", command=self.action_save_png)
+        btn_export_png.pack(side="left", fill="x", expand=True, padx=3)
+
+        btn_copy_tc = ttk.Button(print_action_frame, text="📋 Kodu Kopyala", style="Action.TButton", command=self.action_copy_tc)
+        btn_copy_tc.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
         # ---------------- SAĞ PANEL (Kayıtlı İşçiler & Toplu İşlemler) ----------------
         right_card = ttk.Frame(main_container, style="Card.TFrame", padding=12)
         right_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         
         right_top = ttk.Frame(right_card, style="Card.TFrame")
-        right_top.pack(fill="x", pady=(0, 8))
+        right_top.pack(fill="x", pady=(0, 6))
         
-        ttk.Label(right_top, text="Kayıtlı Kodlar & Personel Listesi", style="Title.TLabel").pack(side="left")
+        self.lbl_table_title = ttk.Label(right_top, text="Kayıtlı Kodlar Listesi", style="Title.TLabel")
+        self.lbl_table_title.pack(side="left")
         
         search_frame = ttk.Frame(right_top, style="Card.TFrame")
         search_frame.pack(side="right")
@@ -235,6 +246,7 @@ class QRCodeApp:
         self.entry_search.pack(side="left")
         self.entry_search.bind("<KeyRelease>", self.on_search)
 
+        # Tablo (Treeview)
         table_frame = ttk.Frame(right_card, style="Card.TFrame")
         table_frame.pack(fill="both", expand=True)
         
@@ -247,11 +259,11 @@ class QRCodeApp:
         self.tree.heading("tckn", text="Barkod / Kod Değeri")
         self.tree.heading("created_at", text="Kayıt Tarihi")
         
-        self.tree.column("id", width=35, anchor="center")
-        self.tree.column("name", width=110)
-        self.tree.column("surname", width=110)
-        self.tree.column("tckn", width=130, anchor="center")
-        self.tree.column("created_at", width=110, anchor="center")
+        self.tree.column("id", width=40, anchor="center")
+        self.tree.column("name", width=120)
+        self.tree.column("surname", width=120)
+        self.tree.column("tckn", width=140, anchor="center")
+        self.tree.column("created_at", width=120, anchor="center")
         
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -260,18 +272,46 @@ class QRCodeApp:
         scrollbar.pack(side="right", fill="y")
         
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+        
+        # Sağ Tık Menüsü (Context Menu)
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="📊 Seçilenleri Excel Formatında Kopyala (Ctrl+C)", command=self.action_copy_table_selection)
+        self.context_menu.add_command(label="🖼️ Seçili Barkod Görselini Kopyala (Ctrl+Shift+C)", command=self.action_copy_image_to_clipboard)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="📋 Excel Panosundan Yapıştır (Ctrl+V)", command=self.action_paste_from_clipboard)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🖨️ Seçilenleri Yazdır (Ctrl+P)", command=self.action_print_selected)
+        self.context_menu.add_command(label="🗑️ Seçilenleri Sil (Delete)", command=self.action_delete_worker)
+        
+        self.tree.bind("<Button-3>", self.show_context_menu)
 
-        # Alt Buton Grubu
+        # Alt Buton Grubu - Üst Satır (Excel & Seri Üretim)
+        excel_action_frame = ttk.Frame(right_card, style="Card.TFrame")
+        excel_action_frame.pack(fill="x", pady=(6, 4))
+        
+        btn_paste_clip = ttk.Button(excel_action_frame, text="📋 Excel'den Yapıştır (Pano)", style="Excel.TButton", command=self.action_paste_from_clipboard)
+        btn_paste_clip.pack(side="left", padx=(0, 4))
+        
+        btn_export_xlsx = ttk.Button(excel_action_frame, text="📊 Excel'e Aktar (.xlsx)", style="Excel.TButton", command=self.action_export_excel_file)
+        btn_export_xlsx.pack(side="left", padx=4)
+
+        btn_seq_gen = ttk.Button(excel_action_frame, text="🔢 Sıralı / Seri Kod Üret", style="Action.TButton", command=self.open_serial_generator_dialog)
+        btn_seq_gen.pack(side="left", padx=4)
+
+        btn_copy_excel = ttk.Button(excel_action_frame, text="📑 Tabloyu Kopyala (Ctrl+C)", style="Action.TButton", command=self.action_copy_table_selection)
+        btn_copy_excel.pack(side="right")
+
+        # Alt Buton Grubu - İkinci Satır (Yazdırma, Dosyadan Aktarım & Silme)
         bottom_btn_frame = ttk.Frame(right_card, style="Card.TFrame")
-        bottom_btn_frame.pack(fill="x", pady=(8, 0))
+        bottom_btn_frame.pack(fill="x", pady=(2, 0))
         
         btn_print_selected = ttk.Button(bottom_btn_frame, text="🖨️ Seçilenleri Yazdır (A4 3'lü)", style="Success.TButton", command=self.action_print_selected)
         btn_print_selected.pack(side="left", padx=(0, 4))
         
-        btn_import_excel = ttk.Button(bottom_btn_frame, text="📂 Excel/CSV'den Aktar", style="Action.TButton", command=self.action_import_excel)
+        btn_import_excel = ttk.Button(bottom_btn_frame, text="📂 Excel Dosyası Seç", style="Action.TButton", command=self.action_import_excel)
         btn_import_excel.pack(side="left", padx=4)
         
-        btn_export_bulk = ttk.Button(bottom_btn_frame, text="📁 Toplu Aktar...", style="Action.TButton", command=self.action_export_bulk_dialog)
+        btn_export_bulk = ttk.Button(bottom_btn_frame, text="📁 Toplu Resim Aktar...", style="Action.TButton", command=self.action_export_bulk_dialog)
         btn_export_bulk.pack(side="left", padx=4)
         
         btn_delete = ttk.Button(bottom_btn_frame, text="🗑️ Sil", style="Action.TButton", command=self.action_delete_worker)
@@ -280,6 +320,54 @@ class QRCodeApp:
         # 3. En Alt Durum Çubuğu
         self.status_bar = ttk.Label(self.root, text="Sistem hazır.", font=("Segoe UI", 9), background="#E2E8F0", padding=(15, 4))
         self.status_bar.pack(fill="x", side="bottom")
+
+    def bind_shortcuts(self):
+        """Klavye kısayollarını tanımlar."""
+        self.root.bind("<Control-c>", lambda e: self.on_ctrl_c(e))
+        self.root.bind("<Control-Shift-C>", lambda e: self.action_copy_image_to_clipboard())
+        self.root.bind("<Control-Shift-c>", lambda e: self.action_copy_image_to_clipboard())
+        self.root.bind("<Control-v>", lambda e: self.on_ctrl_v(e))
+        self.root.bind("<Control-a>", lambda e: self.on_ctrl_a(e))
+        self.root.bind("<Control-p>", lambda e: self.action_print_selected())
+        self.root.bind("<Delete>", lambda e: self.on_delete_key(e))
+
+    def on_ctrl_c(self, event):
+        """Ctrl+C tuşuna basıldığında odak tablodaysa seçili satırları Excel formatında kopyalar."""
+        focused = self.root.focus_get()
+        if isinstance(focused, (tk.Entry, ttk.Entry)):
+            return  # Entry içinde normal metin kopyalama
+        self.action_copy_table_selection()
+
+    def on_ctrl_v(self, event):
+        """Ctrl+V tuşuna basıldığında odak tablodaysa panodaki Excel verilerini aktarır."""
+        focused = self.root.focus_get()
+        if isinstance(focused, (tk.Entry, ttk.Entry)):
+            return  # Entry içinde normal metin yapıştırma
+        self.action_paste_from_clipboard()
+
+    def on_ctrl_a(self, event):
+        """Ctrl+A ile tablodaki tüm satırları seçer."""
+        focused = self.root.focus_get()
+        if isinstance(focused, (tk.Entry, ttk.Entry)):
+            return
+        for item in self.tree.get_children():
+            self.tree.selection_add(item)
+        return "break"
+
+    def on_delete_key(self, event):
+        """Delete tuşuna basıldığında seçili satırları siler."""
+        focused = self.root.focus_get()
+        if isinstance(focused, (tk.Entry, ttk.Entry)):
+            return
+        self.action_delete_worker()
+
+    def show_context_menu(self, event):
+        """Sağ tıklandığında menüyü açar."""
+        item = self.tree.identify_row(event.y)
+        if item:
+            if item not in self.tree.selection():
+                self.tree.selection_set(item)
+            self.context_menu.post(event.x_root, event.y_root)
 
     def get_clean_barcode_type(self) -> str:
         """Combobox değerinden clean barcode type döndürür."""
@@ -380,15 +468,223 @@ class QRCodeApp:
         self.lbl_preview.config(image=tk_img, text="")
         self.lbl_preview.image = tk_img
 
+    def action_copy_image_to_clipboard(self):
+        """Şu an önizlenen görseli doğrudan Windows Panosuna (Bitmap) kopyalar. Excel'de Ctrl+V ile resim yapışır!"""
+        if self.current_badge_image is None:
+            # Otomatik oluşturmayı dene
+            code_val = self.entry_tckn.get().strip()
+            if code_val:
+                self.action_generate_code(silent=True)
+                
+        if self.current_badge_image is None:
+            messagebox.showwarning("Uyarı", "Kopyalanacak bir barkod görseli henüz oluşturulmadı!")
+            return
+            
+        success = qr_generator.copy_image_to_clipboard(self.current_badge_image)
+        if success:
+            code_str = self.current_worker_data.get("tckn", "") if self.current_worker_data else ""
+            msg = f"✓ Barkod görseli panoya kopyalandı!\nExcel, Word veya Paint'e geçip Ctrl+V ile doğrudan resim olarak yapıştırabilirsiniz."
+            self.set_status(f"Görsel Panoya Kopyalandı (Excel'e Ctrl+V yapıştırabilirsiniz) - Kod: {code_str}")
+            messagebox.showinfo("Panoya Kopyalandı", msg)
+        else:
+            messagebox.showerror("Hata", "Görsel panoya kopyalanırken hata oluştu.")
+
     def action_copy_tc(self):
-        """Barkod / Kod değerini panoya kopyalar."""
+        """Barkod / Kod metin değerini panoya kopyalar."""
         code_val = self.entry_tckn.get().strip()
         if not code_val:
             messagebox.showwarning("Uyarı", "Kopyalanacak kod değeri bulunamadı.")
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(code_val)
-        self.set_status(f"Panoya kopyalandı: {code_val}")
+        self.set_status(f"Kod panoya kopyalandı: {code_val}")
+
+    def action_copy_table_selection(self):
+        """Tabloda seçili satırları Excel uyumlu Tab-Separated (TSV) formatında panoya kopyalar."""
+        selected = self.tree.selection()
+        if not selected:
+            # Seçim yoksa tüm tabloyu kopyalamayı öner
+            selected = self.tree.get_children()
+            
+        if not selected:
+            messagebox.showwarning("Uyarı", "Tabloda kopyalanacak kayıt bulunamadı.")
+            return
+            
+        lines = ["Sıra\tİsim / Başlık\tSoyisim / Detay\tBarkod / Kod Değeri\tKayıt Tarihi"]
+        for item in selected:
+            vals = self.tree.item(item, "values")
+            if vals:
+                lines.append("\t".join(str(v) for v in vals))
+                
+        clipboard_text = "\n".join(lines)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(clipboard_text)
+        
+        self.set_status(f"{len(selected)} kayıt Excel formatında panoya kopyalandı (Excel'de Ctrl+V yapın).")
+        messagebox.showinfo("Excel İçin Kopyalandı", f"{len(selected)} kayıt başarıyla panoya kopyalandı!\nExcel sayfasına geçip dilediğiniz hücreye Ctrl+V ile yapıştırabilirsiniz.")
+
+    def action_paste_from_clipboard(self):
+        """Panodaki (Excel'den kopyalanmış) sekmeli veya satırlı metni anında içeri aktarır."""
+        try:
+            raw_text = self.root.clipboard_get()
+        except Exception:
+            messagebox.showwarning("Pano Boş", "Panoda yapıştırılacak metin bulunamadı.\nLütfen önce Excel'den satırları seçip Ctrl+C ile kopyalayınız.")
+            return
+            
+        if not raw_text or not raw_text.strip():
+            messagebox.showwarning("Pano Boş", "Panodaki metin boş.")
+            return
+            
+        workers_found = qr_generator.parse_clipboard_table_text(raw_text)
+        if not workers_found:
+            messagebox.showwarning("Kayıt Bulunamadı", "Panodaki metinden geçerli bir kod veya kayıt çıkarılamadı.")
+            return
+            
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+        imported_count = 0
+        skipped_count = 0
+        
+        for w in workers_found:
+            name = w["name"]
+            surname = w["surname"]
+            code_val = w["tckn"]
+            try:
+                cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                               (name, surname, code_val, created_at))
+                imported_count += 1
+            except sqlite3.IntegrityError:
+                skipped_count += 1
+                
+        conn.commit()
+        conn.close()
+        
+        self.refresh_worker_list()
+        msg = f"✓ Panodan Tespit Edilen: {len(workers_found)} kayıt\n✓ Başarıyla Eklenen: {imported_count} yeni kayıt\n⚠ Atlanan (Sistemde Zaten Kayıtlı): {skipped_count}"
+        messagebox.showinfo("Panodan Aktarım Başarılı", msg)
+        self.set_status(f"Excel Panosundan {imported_count} kayıt eklendi.")
+
+    def action_export_excel_file(self):
+        """Tüm veya seçili kayıtları formatlı .xlsx Excel tablosu olarak kaydeder."""
+        selected = self.tree.selection()
+        if not selected:
+            selected = self.tree.get_children()
+            
+        if not selected:
+            messagebox.showwarning("Uyarı", "Excel'e aktarılacak kayıt bulunamadı.")
+            return
+            
+        records = []
+        for item in selected:
+            vals = self.tree.item(item, "values")
+            if vals:
+                records.append(vals)
+                
+        default_filename = f"Barkod_Listesi_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel Dosyası", "*.xlsx"), ("Tüm Dosyalar", "*.*")],
+            initialfile=default_filename
+        )
+        if not filepath:
+            return
+            
+        try:
+            qr_generator.export_records_to_excel(records, filepath)
+            messagebox.showinfo("Excel'e Aktarıldı", f"Toplam {len(records)} kayıt başarıyla Excel dosyasına kaydedildi:\n{filepath}")
+            self.set_status(f"Excel dosyası oluşturuldu: {filepath}")
+        except Exception as e:
+            messagebox.showerror("Hata", f"Excel dosyası kaydedilirken hata oluştu:\n{str(e)}")
+
+    def open_serial_generator_dialog(self):
+        """Toplu sıralı / seri barkod üretim penceresini açar."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Sıralı / Seri Barkod Üretici")
+        dialog.geometry("480x360")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="🔢 Toplu Sıralı / Seri Kod Üretici", font=("Segoe UI", 12, "bold")).pack(pady=(15, 10))
+
+        form_box = ttk.Frame(dialog, padding=15)
+        form_box.pack(fill="x")
+        form_box.columnconfigure(1, weight=1)
+
+        ttk.Label(form_box, text="Başlangıç Numarası:", style="Normal.TLabel").grid(row=0, column=0, sticky="w", pady=4)
+        entry_start = ttk.Entry(form_box, font=("Segoe UI", 9))
+        entry_start.insert(0, "1001")
+        entry_start.grid(row=0, column=1, sticky="ew", pady=4, padx=(10, 0))
+
+        ttk.Label(form_box, text="Üretilecek Adet:", style="Normal.TLabel").grid(row=1, column=0, sticky="w", pady=4)
+        entry_count = ttk.Entry(form_box, font=("Segoe UI", 9))
+        entry_count.insert(0, "50")
+        entry_count.grid(row=1, column=1, sticky="ew", pady=4, padx=(10, 0))
+
+        ttk.Label(form_box, text="Ön Ek (Örn: URUN-):", style="Normal.TLabel").grid(row=2, column=0, sticky="w", pady=4)
+        entry_prefix = ttk.Entry(form_box, font=("Segoe UI", 9))
+        entry_prefix.insert(0, "URUN-")
+        entry_prefix.grid(row=2, column=1, sticky="ew", pady=4, padx=(10, 0))
+
+        ttk.Label(form_box, text="Basamak (Sıfırla Doldurma):", style="Normal.TLabel").grid(row=3, column=0, sticky="w", pady=4)
+        entry_pad = ttk.Entry(form_box, font=("Segoe UI", 9))
+        entry_pad.insert(0, "4")
+        entry_pad.grid(row=3, column=1, sticky="ew", pady=4, padx=(10, 0))
+
+        ttk.Label(form_box, text="İsim Şablonu (Opsiyonel):", style="Normal.TLabel").grid(row=4, column=0, sticky="w", pady=4)
+        entry_itemname = ttk.Entry(form_box, font=("Segoe UI", 9))
+        entry_itemname.insert(0, "Ürün #{no}")
+        entry_itemname.grid(row=4, column=1, sticky="ew", pady=4, padx=(10, 0))
+
+        def generate_and_save_serial():
+            try:
+                start_num = int(entry_start.get().strip())
+                count = int(entry_count.get().strip())
+                prefix = entry_prefix.get().strip()
+                pad_len = int(entry_pad.get().strip() or "0")
+                name_tpl = entry_itemname.get().strip()
+                
+                if count <= 0 or count > 5000:
+                    messagebox.showwarning("Geçersiz Adet", "Üretilecek adet 1 ile 5000 arasında olmalıdır.")
+                    return
+            except ValueError:
+                messagebox.showerror("Hata", "Lütfen başlangıç numarası, adet ve basamak alanlarına geçerli tamsayılar giriniz.")
+                return
+
+            dialog.destroy()
+            items = qr_generator.generate_sequential_codes(
+                start_num=start_num,
+                count=count,
+                prefix=prefix,
+                pad_length=pad_len,
+                name_template=name_tpl
+            )
+
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+            added = 0
+            skipped = 0
+            for itm in items:
+                try:
+                    cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                                   (itm["name"], itm["surname"], itm["tckn"], created_at))
+                    added += 1
+                except sqlite3.IntegrityError:
+                    skipped += 1
+            conn.commit()
+            conn.close()
+
+            self.refresh_worker_list()
+            messagebox.showinfo("Seri Üretim Tamamlandı", f"✓ {added} adet sıralı barkod listeye eklendi.\n⚠ Atlanan (Zaten Kayıtlı): {skipped}")
+            self.set_status(f"{added} adet sıralı barkod oluşturuldu ({prefix}{start_num}...)")
+
+        btn_box = ttk.Frame(dialog, padding=15)
+        btn_box.pack(fill="x", side="bottom")
+
+        ttk.Button(btn_box, text="Üret ve Listeye Ekle", style="Success.TButton", command=generate_and_save_serial).pack(side="right", padx=(5, 0))
+        ttk.Button(btn_box, text="İptal", style="Action.TButton", command=dialog.destroy).pack(side="right", padx=(0, 5))
 
     def action_save_worker(self):
         """Girişi yapılan kaydı veritabanına ekler."""
@@ -437,6 +733,8 @@ class QRCodeApp:
         
         for row in rows:
             self.tree.insert("", "end", values=row)
+
+        self.lbl_table_title.config(text=f"Kayıtlı Kodlar Listesi ({len(rows)} Kayıt)")
 
     def on_search(self, event):
         """Arama kutusuna yazıldıkça tabloyu filtreler."""
@@ -613,19 +911,20 @@ class QRCodeApp:
             messagebox.showwarning("Uyarı", "Silinecek kaydı tablodan seçiniz.")
             return
             
-        item_values = self.tree.item(selected[0], "values")
-        worker_id, name, surname, code_val, _ = item_values
-        
-        disp_title = f"'{name} {surname}' (Kod: {code_val})" if (name or surname) else f"'{code_val}'"
-        confirm = messagebox.askyesno("Silme Onayı", f"{disp_title} kaydını silmek istediğinize emin misiniz?")
+        count = len(selected)
+        confirm = messagebox.askyesno("Silme Onayı", f"Seçilen {count} adet kaydı silmek istediğinize emin misiniz?")
         if confirm:
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+            for item in selected:
+                item_values = self.tree.item(item, "values")
+                if item_values:
+                    worker_id = item_values[0]
+                    cursor.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
             conn.commit()
             conn.close()
             
-            messagebox.showinfo("Silindi", "Kayıt başarıyla silindi.")
+            messagebox.showinfo("Silindi", f"{count} adet kayıt başarıyla silindi.")
             self.refresh_worker_list()
 
     def action_import_excel(self):
@@ -690,7 +989,7 @@ class QRCodeApp:
         export_dialog.transient(self.root)
         export_dialog.grab_set()
 
-        ttk.Label(export_dialog, text="📁 Toplu Dışa Aktarma Seçenekleri", font=("Segoe UI", 12, "bold")).pack(pady=(15, 10))
+        ttk.Label(export_dialog, text="📁 Toplu Resim Dışa Aktarma", font=("Segoe UI", 12, "bold")).pack(pady=(15, 10))
 
         content_frame = ttk.Frame(export_dialog, padding=15)
         content_frame.pack(fill="x")
