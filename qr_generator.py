@@ -1,12 +1,16 @@
 """
 QR Kod & Barkod Üretimi, Excel Entegrasyonu ve Pano Servisi
-Desteklenen formatlar: QR Kod, 1D Barkod (Code 128, Code 39, EAN-13), Kombine (QR + Barkod)
+Desteklenen formatlar:
+- QR Kod (2D)
+- 1D Çizgi Barkodlar: Code 128, Code 39, EAN-13, EAN-8, UPC-A
+- Kombine Kart (QR + Barkod)
 Serbest metin, alfanümerik kod, seri numarası veya TC Kimlik Numarası ile çalışır.
 """
 import os
 import re
 import csv
 import io
+import tempfile
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
@@ -16,18 +20,19 @@ import win32clipboard
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.drawing.image import Image as OpenPyxlImage
 
 
 def get_system_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     """
-    Sistemde yüklü olan en uygun yazı tipini (Arial, Segoe UI, Calibri) döndürür.
+    Sistemde yüklü olan en uygun Türkçe destekli yazı tipini (Segoe UI, Arial, Calibri) döndürür.
     Bulamazsa varsayılan PIL fontunu yükler.
     """
     candidates = [
-        "arialbd.ttf" if bold else "arial.ttf",
         "segoeuib.ttf" if bold else "segoeui.ttf",
+        "arialbd.ttf" if bold else "arial.ttf",
         "calibrib.ttf" if bold else "calibri.ttf",
-        "tahoma.ttf",
+        "tahomabd.ttf" if bold else "tahoma.ttf",
     ]
     for font_name in candidates:
         try:
@@ -60,27 +65,53 @@ def copy_image_to_clipboard(pil_image: Image.Image) -> bool:
         return False
 
 
-def sanitize_for_barcode(text: str, barcode_type: str = "code128") -> str:
+def sanitize_for_barcode(text: str, barcode_type: str = "code128") -> tuple[str, str]:
     """
-    Barkod üretimi için Türkçe karakterleri ve geçersiz sembolleri normalize eder.
-    Code 128: Tüm ASCII karakterleri destekler.
-    Code 39: Rakam, büyük harf ve (- . $ / + % boşluk) karakterlerini destekler.
+    Barkod üretimi için metni normalize eder ve seçilen barkod tipine uygunluğunu denetler.
+    Dönüş: (temizlenmis_metin, hata_mesaji)
     """
     if not text:
-        return ""
+        return "", "Kod değeri boş olamaz."
     text = str(text).strip()
     
     # Türkçe karakter dönüşüm haritası
     tr_map = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
     clean = text.translate(tr_map)
     
-    type_key = barcode_type.lower().replace("-", "").replace(" ", "")
-    if "39" in type_key:
+    type_key = barcode_type.lower().replace("-", "").replace(" ", "").replace("_", "")
+    
+    if "ean13" in type_key:
+        digits = "".join(c for c in clean if c.isdigit())
+        if len(digits) not in [12, 13]:
+            return "", f"EAN-13 için 12 veya 13 haneli rakam gereklidir (Girilen: {len(digits)} hane)."
+        return digits[:12], ""  # python-barcode 12 hane alıp checksum'ı kendisi hesaplar
+        
+    elif "ean8" in type_key:
+        digits = "".join(c for c in clean if c.isdigit())
+        if len(digits) not in [7, 8]:
+            return "", f"EAN-8 için 7 veya 8 haneli rakam gereklidir (Girilen: {len(digits)} hane)."
+        return digits[:7], ""
+        
+    elif "upca" in type_key or "upc" in type_key:
+        digits = "".join(c for c in clean if c.isdigit())
+        if len(digits) not in [11, 12]:
+            return "", f"UPC-A için 11 veya 12 haneli rakam gereklidir (Girilen: {len(digits)} hane)."
+        return digits[:11], ""
+        
+    elif "39" in type_key:
         clean = clean.upper()
         allowed = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%")
-        clean = "".join(c for c in clean if c in allowed)
+        filtered = "".join(c for c in clean if c in allowed)
+        if not filtered:
+            return "", "Code 39 formatı için geçerli karakter bulunamadı (Harf, rakam, -. $/+%)."
+        return filtered, ""
         
-    return clean
+    else:  # code128 varsayılan
+        # ASCII karakter kontrolü
+        filtered = "".join(c for c in clean if ord(c) < 128)
+        if not filtered:
+            return "", "Code 128 için geçerli ASCII karakteri bulunamadı."
+        return filtered, ""
 
 
 def validate_tckn(tckn: str) -> tuple[bool, str]:
@@ -117,11 +148,11 @@ def validate_tckn(tckn: str) -> tuple[bool, str]:
     return True, "Geçerli TC Kimlik Numarası."
 
 
-def validate_code_value(code_val: str, strict_tckn: bool = False) -> tuple[bool, str]:
+def validate_code_value(code_val: str, strict_tckn: bool = False, barcode_type: str = "code128") -> tuple[bool, str]:
     """
     Girilen kod değerini doğrular.
     - strict_tckn=True ise zorunlu 11 haneli TC kontrolü yapar.
-    - strict_tckn=False ise serbest sayı, harf, seri no değerlerini kabul eder.
+    - strict_tckn=False ise serbest sayı, harf, seri no veya seçilen barkod tipini doğrular.
     """
     if not code_val or not str(code_val).strip():
         return False, "Barkod / Kod değeri boş olamaz."
@@ -131,6 +162,11 @@ def validate_code_value(code_val: str, strict_tckn: bool = False) -> tuple[bool,
     if strict_tckn:
         return validate_tckn(code_val)
         
+    # Barkod türüne özel kontrol
+    clean_val, err = sanitize_for_barcode(code_val, barcode_type=barcode_type)
+    if err:
+        return False, err
+        
     if len(code_val) == 11 and code_val.isdigit():
         is_tckn, _ = validate_tckn(code_val)
         if is_tckn:
@@ -138,7 +174,7 @@ def validate_code_value(code_val: str, strict_tckn: bool = False) -> tuple[bool,
         else:
             return True, f"Özel Kod / Sayı Değeri ({len(code_val)} Karakter)"
             
-    return True, f"Geçerli Kod Değeri ({len(code_val)} Karakter)"
+    return True, f"Geçerli Kod Değeri ({len(clean_val)} Karakter)"
 
 
 def generate_qr_image(data: str, box_size: int = 10, border: int = 2) -> Image.Image:
@@ -169,41 +205,62 @@ def generate_barcode_image(
 ) -> Image.Image:
     """
     Herhangi bir sayı, harf veya seri numarası için 1D çizgi barkod üretir.
-    - barcode_type: "code128" (varsayılan), "code39"
+    - barcode_type: "code128", "code39", "ean13", "ean8", "upca"
     """
     raw_str = str(data).strip()
-    clean_str = sanitize_for_barcode(raw_str, barcode_type=barcode_type)
+    clean_str, err = sanitize_for_barcode(raw_str, barcode_type=barcode_type)
     if not clean_str:
         clean_str = "0"
         
-    type_key = barcode_type.lower().replace("-", "").replace(" ", "")
-    if "39" in type_key:
+    type_key = barcode_type.lower().replace("-", "").replace(" ", "").replace("_", "")
+    
+    if "ean13" in type_key:
+        bc_class_name = "ean13"
+    elif "ean8" in type_key:
+        bc_class_name = "ean8"
+    elif "upca" in type_key or "upc" in type_key:
+        bc_class_name = "upca"
+    elif "39" in type_key:
         bc_class_name = "code39"
     else:
         bc_class_name = "code128"
         
-    bc_cls = barcode.get_barcode_class(bc_class_name)
-    writer = ImageWriter()
-    
-    writer_options = {
-        "module_width": module_width,
-        "module_height": module_height,
-        "font_size": font_size,
-        "text_distance": 4.0,
-        "quiet_zone": 4.0,
-        "write_text": show_text
-    }
-    
-    if bc_class_name == "code39":
-        bc = bc_cls(clean_str, writer=writer, add_checksum=False)
-    else:
-        bc = bc_cls(clean_str, writer=writer)
+    try:
+        bc_cls = barcode.get_barcode_class(bc_class_name)
+        writer = ImageWriter()
         
-    fp = BytesIO()
-    bc.write(fp, options=writer_options)
-    fp.seek(0)
-    img = Image.open(fp).convert("RGB")
-    return img
+        writer_options = {
+            "module_width": module_width,
+            "module_height": module_height,
+            "font_size": font_size,
+            "text_distance": 4.0,
+            "quiet_zone": 4.0,
+            "write_text": show_text
+        }
+        
+        if bc_class_name == "code39":
+            bc = bc_cls(clean_str, writer=writer, add_checksum=False)
+        else:
+            bc = bc_cls(clean_str, writer=writer)
+            
+        fp = BytesIO()
+        bc.write(fp, options=writer_options)
+        fp.seek(0)
+        img = Image.open(fp).convert("RGB")
+        return img
+    except Exception as e:
+        # Hata durumunda fallback olarak Code 128 dene
+        try:
+            bc_cls = barcode.get_barcode_class("code128")
+            writer = ImageWriter()
+            bc = bc_cls(str(data).strip() or "0", writer=writer)
+            fp = BytesIO()
+            bc.write(fp, options={"module_width": module_width, "module_height": module_height, "write_text": show_text})
+            fp.seek(0)
+            return Image.open(fp).convert("RGB")
+        except Exception:
+            # En son çare boş beyaz resim
+            return Image.new("RGB", (300, 100), "white")
 
 
 def generate_combined_code_image(
@@ -238,22 +295,22 @@ def create_printable_badge(
     name: str,
     surname: str,
     code_value: str,
-    code_mode: str = "qr",
+    code_mode: str = "barcode",
     barcode_type: str = "code128",
     show_barcode_text: bool = True,
     company_title: str = ""
 ) -> Image.Image:
     """
-    Yazıcı çıktısı ve etiket için yüksek kaliteli kart görseli oluşturur (800x850 px).
+    Yazıcı çıktısı ve etiket için yüksek kaliteli, estetik kart görseli oluşturur (800x850 px).
     - code_mode: "qr", "barcode", "both"
     """
     width, height = 800, 850
     card = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(card)
     
-    font_name = get_system_font(42, bold=True)
-    font_code = get_system_font(28, bold=False)
-    font_header = get_system_font(26, bold=True)
+    font_name = get_system_font(40, bold=True)
+    font_code = get_system_font(26, bold=False)
+    font_header = get_system_font(25, bold=True)
     
     code_str = str(code_value).strip()
     full_name = f"{str(name).upper()} {str(surname).upper()}".strip()
@@ -266,8 +323,8 @@ def create_printable_badge(
         comp_text = company_title.strip().upper()
         bbox_comp = draw.textbbox((0, 0), comp_text, font=font_header)
         comp_w = bbox_comp[2] - bbox_comp[0]
-        draw.text(((width - comp_w) // 2, start_y), comp_text, fill="#334155", font=font_header)
-        draw.line([(60, start_y + 40), (width - 60, start_y + 40)], fill="#E2E8F0", width=2)
+        draw.text(((width - comp_w) // 2, start_y), comp_text, fill="#1E293B", font=font_header)
+        draw.line([(50, start_y + 40), (width - 50, start_y + 40)], fill="#E2E8F0", width=2)
         start_y += 55
 
     label_prefix = "TCKN" if (len(code_str) == 11 and code_str.isdigit()) else "KOD"
@@ -284,7 +341,7 @@ def create_printable_badge(
         if has_name:
             bbox = draw.textbbox((0, 0), full_name, font=font_name)
             text_w = bbox[2] - bbox[0]
-            draw.text(((width - text_w) // 2, current_y), full_name, fill="#000000", font=font_name)
+            draw.text(((width - text_w) // 2, current_y), full_name, fill="#0F172A", font=font_name)
             current_y += 55
             
         lbl_str = f"{label_prefix}: {code_str}"
@@ -317,7 +374,7 @@ def create_printable_badge(
         if has_name:
             bbox = draw.textbbox((0, 0), full_name, font=font_name)
             text_w = bbox[2] - bbox[0]
-            draw.text(((width - text_w) // 2, current_y), full_name, fill="#000000", font=font_name)
+            draw.text(((width - text_w) // 2, current_y), full_name, fill="#0F172A", font=font_name)
             current_y += 55
             
         if not show_barcode_text or not has_name:
@@ -356,7 +413,7 @@ def create_printable_badge(
         if has_name:
             bbox = draw.textbbox((0, 0), full_name, font=font_name)
             text_w = bbox[2] - bbox[0]
-            draw.text(((width - text_w) // 2, current_y), full_name, fill="#000000", font=font_name)
+            draw.text(((width - text_w) // 2, current_y), full_name, fill="#0F172A", font=font_name)
         else:
             lbl_str = f"{label_prefix}: {code_str}"
             bbox_lbl = draw.textbbox((0, 0), lbl_str, font=font_code)
@@ -370,7 +427,7 @@ def create_grid_printable_pages(
     workers: list[tuple[str, str, str]],
     items_per_row: int = 3,
     rows_per_page: int = 4,
-    code_mode: str = "qr",
+    code_mode: str = "barcode",
     barcode_type: str = "code128",
     show_barcode_text: bool = True,
     company_title: str = ""
@@ -549,10 +606,18 @@ def smart_parse_excel_or_csv(filepath: str) -> list[dict]:
         for encoding in ["utf-8-sig", "utf-8", "cp1254", "iso-8859-9", "latin-1"]:
             try:
                 with open(filepath, mode="r", encoding=encoding) as f:
-                    reader = csv.reader(f)
+                    sample = f.read(4096)
+                    f.seek(0)
+                    dialect = csv.excel
+                    try:
+                        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;|\t")
+                    except Exception:
+                        pass
+                    reader = csv.reader(f, dialect)
                     for r in reader:
                         sheet_rows.append([str(cell).strip() if cell else "" for cell in r])
-                break
+                if sheet_rows:
+                    break
             except Exception:
                 continue
         if sheet_rows:
@@ -697,9 +762,16 @@ def parse_raw_grid_rows(all_sheet_rows: list[list[list[str]]]) -> list[dict]:
     return workers
 
 
-def export_records_to_excel(records: list[tuple], filepath: str):
+def export_records_to_excel(
+    records: list[tuple],
+    filepath: str,
+    include_images: bool = False,
+    code_mode: str = "barcode",
+    barcode_type: str = "code128"
+):
     """
     Kayıt listesini şık biçimlendirilmiş bir .xlsx Excel tablosu olarak kaydeder.
+    include_images=True ise her satırın yanına gerçek barkod görselini gömer.
     records: list of (id, name, surname, code_val, created_at)
     """
     wb = openpyxl.Workbook()
@@ -707,10 +779,15 @@ def export_records_to_excel(records: list[tuple], filepath: str):
     ws.title = "Barkod Listesi"
     
     headers = ["Sıra / ID", "İsim / Başlık", "Soyisim / Detay", "Barkod / Kod Değeri", "Kayıt Tarihi"]
+    if include_images:
+        headers.append("Barkod / QR Görseli")
+        
     ws.append(headers)
     
     header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
     header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+    
+    ws.row_dimensions[1].height = 28
     
     for col_idx in range(1, len(headers) + 1):
         cell = ws.cell(row=1, column=col_idx)
@@ -725,7 +802,15 @@ def export_records_to_excel(records: list[tuple], filepath: str):
         bottom=Side(style='thin', color='CBD5E1')
     )
     
+    temp_dir = tempfile.mkdtemp()
+    temp_images = []
+    
     for r_idx, row in enumerate(records, start=2):
+        if include_images:
+            ws.row_dimensions[r_idx].height = 65
+        else:
+            ws.row_dimensions[r_idx].height = 22
+            
         for c_idx, val in enumerate(row, start=1):
             cell = ws.cell(row=r_idx, column=c_idx, value=str(val))
             cell.font = Font(name="Segoe UI", size=10)
@@ -735,12 +820,58 @@ def export_records_to_excel(records: list[tuple], filepath: str):
             else:
                 cell.alignment = Alignment(horizontal="left", vertical="center")
                 
+        if include_images:
+            # Görsel oluşturup hücreye yerleştir
+            code_val = str(row[3])
+            img_cell = ws.cell(row=r_idx, column=6)
+            img_cell.border = thin_border
+            img_cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            try:
+                if code_mode == "qr":
+                    pil_img = generate_qr_image(code_val, box_size=4, border=1)
+                elif code_mode == "both":
+                    pil_img = generate_combined_code_image(code_val, barcode_type=barcode_type, show_barcode_text=True)
+                else:
+                    pil_img = generate_barcode_image(code_val, barcode_type=barcode_type, show_text=True, module_width=0.25, module_height=10.0, font_size=10)
+                
+                # Boyutlandır (Hücreye sığdır)
+                max_w, max_h = 160, 55
+                pil_img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+                
+                temp_img_path = os.path.join(temp_dir, f"cell_img_{r_idx}.png")
+                pil_img.save(temp_img_path)
+                temp_images.append(temp_img_path)
+                
+                xl_img = OpenPyxlImage(temp_img_path)
+                xl_img.width = pil_img.width
+                xl_img.height = pil_img.height
+                
+                cell_coord = f"F{r_idx}"
+                ws.add_image(xl_img, cell_coord)
+            except Exception as img_err:
+                print(f"Excel görsel ekleme hatası: {img_err}")
+                
     for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+        if col_letter == "F" and include_images:
+            ws.column_dimensions[col_letter].width = 28
+        else:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
         
     wb.save(filepath)
+    
+    # Geçici dosyaları temizle
+    for p in temp_images:
+        try:
+            os.remove(p)
+        except Exception:
+            pass
+    try:
+        os.rmdir(temp_dir)
+    except Exception:
+        pass
 
 
 def generate_sequential_codes(

@@ -6,10 +6,20 @@ import sys
 import os
 import json
 import sqlite3
+import ctypes
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
+
+# Windows High-DPI Uyumluluğu (Yüksek çözünürlüklü ekranlarda net yazı/buton görünümü)
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 # Kendi modüllerimiz
 import qr_generator
@@ -19,9 +29,9 @@ import printer_service
 class QRCodeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Barkod & QR Kod Oluşturma, Yazdırma ve Excel Entegrasyonu")
-        self.root.geometry("1240x780")
-        self.root.minsize(1060, 700)
+        self.root.title("Barkod & QR Kod Studio | Excel & Baskı Entegrasyonu")
+        self.root.geometry("1280x820")
+        self.root.minsize(1080, 720)
         
         # Tema ve Stil Ayarları
         self.style = ttk.Style()
@@ -35,10 +45,13 @@ class QRCodeApp:
         # Aktif Önizleme Görseli & Durumlar
         self.current_badge_image = None
         self.current_worker_data = None
+        self.sort_column = "id"
+        self.sort_reverse = True
+        self._resize_timer = None
         
         # Değişkenler
         self.var_code_mode = tk.StringVar(value="barcode")        # "barcode", "qr", "both"
-        self.var_barcode_type = tk.StringVar(value="code128")     # "code128", "code39"
+        self.var_barcode_type = tk.StringVar(value="Code 128 (Genel)") # "code128", "code39", "ean13", "ean8", "upca"
         self.var_show_barcode_text = tk.BooleanVar(value=True)    # Barkod altında kod yazısı
         self.var_strict_tckn = tk.BooleanVar(value=False)         # Sıkı 11 haneli TC kontrolü
         self.var_company_title = tk.StringVar(value="")           # Üst kurum/şirket başlığı
@@ -51,9 +64,11 @@ class QRCodeApp:
 
     def configure_styles(self):
         """Arayüz renk ve yazı tipi stillerini yapılandırır."""
-        bg_dark = "#0F172A"
-        fg_white = "#F8FAFC"
-        accent_blue = "#2563EB"
+        bg_dark = "#0F172A"       # Slate 900
+        fg_white = "#F8FAFC"      # Slate 50
+        accent_blue = "#2563EB"   # Blue 600
+        accent_emerald = "#059669" # Emerald 600
+        accent_green = "#107C41"   # Excel Green
         
         self.root.configure(bg="#F1F5F9")
         
@@ -67,41 +82,44 @@ class QRCodeApp:
         self.style.configure("Normal.TLabel", background="#FFFFFF", foreground="#334155", font=("Segoe UI", 9))
         self.style.configure("Sub.TLabel", background="#FFFFFF", foreground="#64748B", font=("Segoe UI", 8))
         
-        self.style.configure("Primary.TButton", font=("Segoe UI", 9, "bold"), background=accent_blue, foreground="white")
-        self.style.map("Primary.TButton", background=[("active", "#1D4ED8")])
+        self.style.configure("Primary.TButton", font=("Segoe UI", 9, "bold"), background=accent_blue, foreground="white", padding=(8, 4))
+        self.style.map("Primary.TButton", background=[("active", "#1D4ED8"), ("pressed", "#1E40AF")])
         
-        self.style.configure("Success.TButton", font=("Segoe UI", 9, "bold"), background="#059669", foreground="white")
-        self.style.map("Success.TButton", background=[("active", "#047857")])
+        self.style.configure("Success.TButton", font=("Segoe UI", 9, "bold"), background=accent_emerald, foreground="white", padding=(8, 4))
+        self.style.map("Success.TButton", background=[("active", "#047857"), ("pressed", "#065F46")])
 
-        self.style.configure("Excel.TButton", font=("Segoe UI", 9, "bold"), background="#107C41", foreground="white")
-        self.style.map("Excel.TButton", background=[("active", "#0B5A2F")])
+        self.style.configure("Excel.TButton", font=("Segoe UI", 9, "bold"), background=accent_green, foreground="white", padding=(8, 4))
+        self.style.map("Excel.TButton", background=[("active", "#0B5A2F"), ("pressed", "#064E26")])
 
-        self.style.configure("Action.TButton", font=("Segoe UI", 9), background="#E2E8F0", foreground="#0F172A")
-        self.style.map("Action.TButton", background=[("active", "#CBD5E1")])
+        self.style.configure("Action.TButton", font=("Segoe UI", 9), background="#E2E8F0", foreground="#0F172A", padding=(8, 4))
+        self.style.map("Action.TButton", background=[("active", "#CBD5E1"), ("pressed", "#94A3B8")])
+
+        self.style.configure("Danger.TButton", font=("Segoe UI", 9), background="#FEE2E2", foreground="#991B1B", padding=(8, 4))
+        self.style.map("Danger.TButton", background=[("active", "#FECACA"), ("pressed", "#FCA5A5")])
 
         self.style.configure("Card.TRadiobutton", background="#FFFFFF", font=("Segoe UI", 9))
         self.style.configure("Card.TCheckbutton", background="#FFFFFF", font=("Segoe UI", 9))
         self.style.configure("Card.TLabelframe", background="#FFFFFF")
         self.style.configure("Card.TLabelframe.Label", background="#FFFFFF", font=("Segoe UI", 9, "bold"), foreground="#1E293B")
 
-        self.style.configure("Treeview", font=("Segoe UI", 9), rowheight=26)
-        self.style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"), background="#E2E8F0", foreground="#0F172A")
+        self.style.configure("Treeview", font=("Segoe UI", 9), rowheight=28)
+        self.style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"), background="#E2E8F0", foreground="#0F172A", relief="flat")
+        self.style.map("Treeview", background=[("selected", "#3B82F6")], foreground=[("selected", "white")])
 
     def init_db(self):
         """Veritabanı tablosunu oluşturur."""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS workers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                surname TEXT NOT NULL,
-                tckn TEXT UNIQUE NOT NULL,
-                created_at TEXT NOT NULL
-            )
-        """)
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS workers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    surname TEXT NOT NULL,
+                    tckn TEXT UNIQUE NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.commit()
 
     def build_ui(self):
         """Tüm arayüz düzenini oluşturur."""
@@ -109,8 +127,13 @@ class QRCodeApp:
         header_frame = ttk.Frame(self.root, style="Header.TFrame", padding=(20, 12))
         header_frame.pack(fill="x", side="top")
         
-        ttk.Label(header_frame, text="BARKOD & QR KOD OLUŞTURMA, YAZDIRMA VE EXCEL ENTEGRASYONU", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(header_frame, text="Belirlediğiniz Sayı/Harf/TC ile Barkod Üretin, Excel'e Doğrudan Görsel/Hücre Kopyalayın ve Doğrudan Çıktı Alın", style="SubHeader.TLabel").pack(anchor="w", pady=(2, 0))
+        header_inner = ttk.Frame(header_frame, style="Header.TFrame")
+        header_inner.pack(fill="x")
+        
+        ttk.Label(header_inner, text="🏷️ BARKOD & QR KOD STUDIO", style="Header.TLabel").pack(side="left")
+        ttk.Label(header_inner, text="v2.5 Professional", font=("Segoe UI", 9, "bold"), background="#1E293B", foreground="#38BDF8", padding=(6, 2)).pack(side="left", padx=(10, 0))
+        
+        ttk.Label(header_frame, text="Sayı/Harf/TC'den Barkod & QR Kod Üretimi • Excel'e Canlı/Görselli Aktarım • A4 Çoklu Yazıcı Çıktısı", style="SubHeader.TLabel").pack(anchor="w", pady=(2, 0))
 
         # 2. Ana İçerik Alanı
         main_container = ttk.Frame(self.root, padding=12)
@@ -121,10 +144,15 @@ class QRCodeApp:
         main_container.rowconfigure(0, weight=1)
 
         # ---------------- SOL PANEL (Form & Kod Seçimi & Canlı Önizleme) ----------------
-        left_card = ttk.Frame(main_container, style="Card.TFrame", padding=12)
+        left_card = ttk.Frame(main_container, style="Card.TFrame", padding=14)
         left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         
-        ttk.Label(left_card, text="Kod Bilgileri ve Barkod Ayarları", style="Title.TLabel").pack(anchor="w", pady=(0, 6))
+        left_header_box = ttk.Frame(left_card, style="Card.TFrame")
+        left_header_box.pack(fill="x", pady=(0, 6))
+        ttk.Label(left_header_box, text="Kod Bilgileri ve Barkod Ayarları", style="Title.TLabel").pack(side="left")
+        
+        btn_clear_form = ttk.Button(left_header_box, text="🧹 Temizle", style="Action.TButton", command=self.action_clear_form)
+        btn_clear_form.pack(side="right")
         
         # Form Alanları
         form_frame = ttk.Frame(left_card, style="Card.TFrame")
@@ -177,23 +205,36 @@ class QRCodeApp:
 
         # Barkod İnce Ayar Satırı
         bc_opt_box = ttk.Frame(code_type_frame, style="Card.TFrame")
-        bc_opt_box.pack(fill="x", pady=(5, 0))
+        bc_opt_box.pack(fill="x", pady=(6, 0))
 
-        ttk.Label(bc_opt_box, text="Standart:", style="Sub.TLabel").pack(side="left", padx=(0, 4))
-        self.cb_bctype = ttk.Combobox(bc_opt_box, textvariable=self.var_barcode_type, values=["Code 128 (Tüm Sayı/Harf)", "Code 39"], state="readonly", width=18, font=("Segoe UI", 8))
+        ttk.Label(bc_opt_box, text="Tür:", style="Sub.TLabel").pack(side="left", padx=(0, 4))
+        self.cb_bctype = ttk.Combobox(
+            bc_opt_box,
+            textvariable=self.var_barcode_type,
+            values=[
+                "Code 128 (Genel)",
+                "Code 39 (Alfanümerik)",
+                "EAN-13 (13 Hane)",
+                "EAN-8 (8 Hane)",
+                "UPC-A (12 Hane)"
+            ],
+            state="readonly",
+            width=20,
+            font=("Segoe UI", 8)
+        )
         self.cb_bctype.current(0)
         self.cb_bctype.pack(side="left", padx=(0, 8))
         self.cb_bctype.bind("<<ComboboxSelected>>", lambda e: self.on_mode_change())
 
-        chk_text = ttk.Checkbutton(bc_opt_box, text="Metni Göster", variable=self.var_show_barcode_text, style="Card.TCheckbutton", command=self.auto_refresh_preview)
+        chk_text = ttk.Checkbutton(bc_opt_box, text="Alt Yazı", variable=self.var_show_barcode_text, style="Card.TCheckbutton", command=self.auto_refresh_preview)
         chk_text.pack(side="left", padx=(0, 8))
 
-        chk_strict = ttk.Checkbutton(bc_opt_box, text="Sıkı TC", variable=self.var_strict_tckn, style="Card.TCheckbutton", command=self.on_strict_toggle)
+        chk_strict = ttk.Checkbutton(bc_opt_box, text="Sıkı TC Kontrolü", variable=self.var_strict_tckn, style="Card.TCheckbutton", command=self.on_strict_toggle)
         chk_strict.pack(side="left")
 
         # Butonlar Satırı
         btn_frame = ttk.Frame(left_card, style="Card.TFrame")
-        btn_frame.pack(fill="x", pady=(2, 6))
+        btn_frame.pack(fill="x", pady=(3, 6))
         
         btn_generate = ttk.Button(btn_frame, text="✨ Barkod Oluştur", style="Primary.TButton", command=self.action_generate_code)
         btn_generate.pack(side="left", fill="x", expand=True, padx=(0, 3))
@@ -208,19 +249,20 @@ class QRCodeApp:
         preview_header_box = ttk.Frame(left_card, style="Card.TFrame")
         preview_header_box.pack(fill="x", pady=(2, 2))
         ttk.Label(preview_header_box, text="Kart & Baskı Önizlemesi", style="Title.TLabel").pack(side="left")
-        ttk.Label(preview_header_box, text="(Excel'e Ctrl+V ile yapıştırmak için Görseli Kopyala'ya basın)", font=("Segoe UI", 8), foreground="#64748B", background="#FFFFFF").pack(side="right")
+        ttk.Label(preview_header_box, text="(Excel'e Ctrl+V ile yapıştırabilirsiniz)", font=("Segoe UI", 8), foreground="#64748B", background="#FFFFFF").pack(side="right")
         
-        preview_border = tk.Frame(left_card, bg="#CBD5E1", bd=1)
-        preview_border.pack(fill="both", expand=True, pady=(0, 4))
+        self.preview_border = tk.Frame(left_card, bg="#CBD5E1", bd=1)
+        self.preview_border.pack(fill="both", expand=True, pady=(0, 4))
+        self.preview_border.bind("<Configure>", self.on_preview_resize)
         
-        self.lbl_preview = tk.Label(preview_border, bg="#F8FAFC", text="Barkod / QR Kod Önizlemesi Burada Görünecektir")
+        self.lbl_preview = tk.Label(self.preview_border, bg="#F8FAFC", text="Barkod / QR Kod Önizlemesi Burada Görünecektir", font=("Segoe UI", 9), fg="#64748B")
         self.lbl_preview.pack(fill="both", expand=True)
         
         # Alt Hızlı İşlem Butonları
         print_action_frame = ttk.Frame(left_card, style="Card.TFrame")
         print_action_frame.pack(fill="x", pady=(2, 0))
         
-        btn_print = ttk.Button(print_action_frame, text="🖨️ Yazıcı Seç ve Yazdır", style="Success.TButton", command=self.action_print_current)
+        btn_print = ttk.Button(print_action_frame, text="🖨️ Yazdır...", style="Success.TButton", command=self.action_print_current)
         btn_print.pack(side="left", fill="x", expand=True, padx=(0, 3))
         
         btn_export_png = ttk.Button(print_action_frame, text="💾 PNG Kaydet", style="Action.TButton", command=self.action_save_png)
@@ -230,7 +272,7 @@ class QRCodeApp:
         btn_copy_tc.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
         # ---------------- SAĞ PANEL (Kayıtlı İşçiler & Toplu İşlemler) ----------------
-        right_card = ttk.Frame(main_container, style="Card.TFrame", padding=12)
+        right_card = ttk.Frame(main_container, style="Card.TFrame", padding=14)
         right_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         
         right_top = ttk.Frame(right_card, style="Card.TFrame")
@@ -241,8 +283,8 @@ class QRCodeApp:
         
         search_frame = ttk.Frame(right_top, style="Card.TFrame")
         search_frame.pack(side="right")
-        ttk.Label(search_frame, text="Ara:", style="Normal.TLabel").pack(side="left", padx=(0, 4))
-        self.entry_search = ttk.Entry(search_frame, font=("Segoe UI", 9), width=18)
+        ttk.Label(search_frame, text="🔍 Ara:", style="Normal.TLabel").pack(side="left", padx=(0, 4))
+        self.entry_search = ttk.Entry(search_frame, font=("Segoe UI", 9), width=20)
         self.entry_search.pack(side="left")
         self.entry_search.bind("<KeyRelease>", self.on_search)
 
@@ -253,13 +295,13 @@ class QRCodeApp:
         columns = ("id", "name", "surname", "tckn", "created_at")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="extended")
         
-        self.tree.heading("id", text="ID")
-        self.tree.heading("name", text="İsim / Başlık")
-        self.tree.heading("surname", text="Soyisim / Detay")
-        self.tree.heading("tckn", text="Barkod / Kod Değeri")
-        self.tree.heading("created_at", text="Kayıt Tarihi")
+        self.tree.heading("id", text="ID ↕", command=lambda: self.sort_tree_column("id", False))
+        self.tree.heading("name", text="İsim / Başlık ↕", command=lambda: self.sort_tree_column("name", False))
+        self.tree.heading("surname", text="Soyisim / Detay ↕", command=lambda: self.sort_tree_column("surname", False))
+        self.tree.heading("tckn", text="Barkod / Kod Değeri ↕", command=lambda: self.sort_tree_column("tckn", False))
+        self.tree.heading("created_at", text="Kayıt Tarihi ↕", command=lambda: self.sort_tree_column("created_at", False))
         
-        self.tree.column("id", width=40, anchor="center")
+        self.tree.column("id", width=45, anchor="center")
         self.tree.column("name", width=120)
         self.tree.column("surname", width=120)
         self.tree.column("tckn", width=140, anchor="center")
@@ -272,6 +314,7 @@ class QRCodeApp:
         scrollbar.pack(side="right", fill="y")
         
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+        self.tree.bind("<Double-1>", self.on_tree_double_click)
         
         # Sağ Tık Menüsü (Context Menu)
         self.context_menu = tk.Menu(self.root, tearoff=0)
@@ -292,20 +335,20 @@ class QRCodeApp:
         btn_paste_clip = ttk.Button(excel_action_frame, text="📋 Excel'den Yapıştır (Pano)", style="Excel.TButton", command=self.action_paste_from_clipboard)
         btn_paste_clip.pack(side="left", padx=(0, 4))
         
-        btn_export_xlsx = ttk.Button(excel_action_frame, text="📊 Excel'e Aktar (.xlsx)", style="Excel.TButton", command=self.action_export_excel_file)
+        btn_export_xlsx = ttk.Button(excel_action_frame, text="📊 Excel'e Aktar (.xlsx)...", style="Excel.TButton", command=self.open_export_excel_dialog)
         btn_export_xlsx.pack(side="left", padx=4)
 
-        btn_seq_gen = ttk.Button(excel_action_frame, text="🔢 Sıralı / Seri Kod Üret", style="Action.TButton", command=self.open_serial_generator_dialog)
+        btn_seq_gen = ttk.Button(excel_action_frame, text="🔢 Seri / Sıralı Kod Üret", style="Action.TButton", command=self.open_serial_generator_dialog)
         btn_seq_gen.pack(side="left", padx=4)
 
-        btn_copy_excel = ttk.Button(excel_action_frame, text="📑 Tabloyu Kopyala (Ctrl+C)", style="Action.TButton", command=self.action_copy_table_selection)
+        btn_copy_excel = ttk.Button(excel_action_frame, text="📑 Tabloyu Kopyala", style="Action.TButton", command=self.action_copy_table_selection)
         btn_copy_excel.pack(side="right")
 
         # Alt Buton Grubu - İkinci Satır (Yazdırma, Dosyadan Aktarım & Silme)
         bottom_btn_frame = ttk.Frame(right_card, style="Card.TFrame")
         bottom_btn_frame.pack(fill="x", pady=(2, 0))
         
-        btn_print_selected = ttk.Button(bottom_btn_frame, text="🖨️ Seçilenleri Yazdır (A4 3'lü)", style="Success.TButton", command=self.action_print_selected)
+        btn_print_selected = ttk.Button(bottom_btn_frame, text="🖨️ Seçilenleri Yazdır (A4)", style="Success.TButton", command=self.action_print_selected)
         btn_print_selected.pack(side="left", padx=(0, 4))
         
         btn_import_excel = ttk.Button(bottom_btn_frame, text="📂 Excel Dosyası Seç", style="Action.TButton", command=self.action_import_excel)
@@ -314,12 +357,18 @@ class QRCodeApp:
         btn_export_bulk = ttk.Button(bottom_btn_frame, text="📁 Toplu Resim Aktar...", style="Action.TButton", command=self.action_export_bulk_dialog)
         btn_export_bulk.pack(side="left", padx=4)
         
-        btn_delete = ttk.Button(bottom_btn_frame, text="🗑️ Sil", style="Action.TButton", command=self.action_delete_worker)
+        btn_delete = ttk.Button(bottom_btn_frame, text="🗑️ Sil", style="Danger.TButton", command=self.action_delete_worker)
         btn_delete.pack(side="right")
 
         # 3. En Alt Durum Çubuğu
-        self.status_bar = ttk.Label(self.root, text="Sistem hazır.", font=("Segoe UI", 9), background="#E2E8F0", padding=(15, 4))
-        self.status_bar.pack(fill="x", side="bottom")
+        self.status_bar_frame = ttk.Frame(self.root, style="Header.TFrame", padding=(15, 6))
+        self.status_bar_frame.pack(fill="x", side="bottom")
+        
+        self.status_bar = ttk.Label(self.status_bar_frame, text="Sistem hazır.", font=("Segoe UI", 9), foreground="#E2E8F0", background="#0F172A")
+        self.status_bar.pack(side="left")
+
+        self.status_counter = ttk.Label(self.status_bar_frame, text="0 Kayıt", font=("Segoe UI", 9, "bold"), foreground="#38BDF8", background="#0F172A")
+        self.status_counter.pack(side="right")
 
     def bind_shortcuts(self):
         """Klavye kısayollarını tanımlar."""
@@ -335,14 +384,14 @@ class QRCodeApp:
         """Ctrl+C tuşuna basıldığında odak tablodaysa seçili satırları Excel formatında kopyalar."""
         focused = self.root.focus_get()
         if isinstance(focused, (tk.Entry, ttk.Entry)):
-            return  # Entry içinde normal metin kopyalama
+            return
         self.action_copy_table_selection()
 
     def on_ctrl_v(self, event):
         """Ctrl+V tuşuna basıldığında odak tablodaysa panodaki Excel verilerini aktarır."""
         focused = self.root.focus_get()
         if isinstance(focused, (tk.Entry, ttk.Entry)):
-            return  # Entry içinde normal metin yapıştırma
+            return
         self.action_paste_from_clipboard()
 
     def on_ctrl_a(self, event):
@@ -372,7 +421,13 @@ class QRCodeApp:
     def get_clean_barcode_type(self) -> str:
         """Combobox değerinden clean barcode type döndürür."""
         val = self.var_barcode_type.get().lower()
-        if "39" in val:
+        if "ean-13" in val or "ean13" in val:
+            return "ean13"
+        elif "ean-8" in val or "ean8" in val:
+            return "ean8"
+        elif "upc" in val:
+            return "upca"
+        elif "39" in val:
             return "code39"
         return "code128"
 
@@ -396,16 +451,29 @@ class QRCodeApp:
         """Sıkı TC kontrolü açılıp kapandığında denetimi yeniler."""
         self.on_code_input(None)
 
+    def action_clear_form(self):
+        """Form alanlarını temizler."""
+        self.entry_name.delete(0, tk.END)
+        self.entry_surname.delete(0, tk.END)
+        self.entry_tckn.delete(0, tk.END)
+        self.lbl_status.config(text="Form temizlendi. Yeni değer girebilirsiniz.", foreground="#64748B")
+        self.lbl_preview.config(image="", text="Barkod / QR Kod Önizlemesi Burada Görünecektir")
+        self.lbl_preview.image = None
+        self.current_badge_image = None
+        self.current_worker_data = None
+        self.entry_tckn.focus_set()
+
     def on_code_input(self, event):
         """Kod alanına yazıldıkça canlı denetler ve önizler."""
         val = self.entry_tckn.get().strip()
         strict = self.var_strict_tckn.get()
+        b_type = self.get_clean_barcode_type()
         
         if not val:
             self.lbl_status.config(text="Barkod veya QR koda dönüştürülecek sayı/harf değerini giriniz.", foreground="#64748B")
             return
 
-        is_valid, msg = qr_generator.validate_code_value(val, strict_tckn=strict)
+        is_valid, msg = qr_generator.validate_code_value(val, strict_tckn=strict, barcode_type=b_type)
         if is_valid:
             self.lbl_status.config(text="✓ " + msg, foreground="#059669")
             self.auto_refresh_preview()
@@ -417,9 +485,17 @@ class QRCodeApp:
         code_val = self.entry_tckn.get().strip()
         if code_val:
             strict = self.var_strict_tckn.get()
-            is_valid, _ = qr_generator.validate_code_value(code_val, strict_tckn=strict)
+            b_type = self.get_clean_barcode_type()
+            is_valid, _ = qr_generator.validate_code_value(code_val, strict_tckn=strict, barcode_type=b_type)
             if is_valid:
                 self.action_generate_code(silent=True)
+
+    def on_preview_resize(self, event):
+        """Pencere boyutu değiştiğinde önizleme görselini orantılı yeniden ölçekler."""
+        if self.current_badge_image:
+            if self._resize_timer:
+                self.root.after_cancel(self._resize_timer)
+            self._resize_timer = self.root.after(100, lambda: self.display_preview(self.current_badge_image))
 
     def action_generate_code(self, silent: bool = False):
         """Girilen bilgilere göre Barkod / QR / Kombine kart oluşturup önizler."""
@@ -428,15 +504,15 @@ class QRCodeApp:
         code_val = self.entry_tckn.get().strip()
         company = self.var_company_title.get().strip()
         strict = self.var_strict_tckn.get()
+        barcode_type = self.get_clean_barcode_type()
         
-        is_valid, msg = qr_generator.validate_code_value(code_val, strict_tckn=strict)
+        is_valid, msg = qr_generator.validate_code_value(code_val, strict_tckn=strict, barcode_type=barcode_type)
         if not is_valid:
             if not silent:
                 messagebox.showwarning("Geçersiz Kod Değeri", msg)
             return
             
         code_mode = self.var_code_mode.get()
-        barcode_type = self.get_clean_barcode_type()
         show_text = self.var_show_barcode_text.get()
 
         # Kart Görseli Üret
@@ -458,11 +534,15 @@ class QRCodeApp:
 
     def display_preview(self, pil_image: Image.Image):
         """PIL Görselini ekrandaki önizleme kutusuna boyutlandırıp yerleştirir."""
-        box_w = self.lbl_preview.winfo_width() or 420
-        box_h = self.lbl_preview.winfo_height() or 260
+        if not pil_image:
+            return
+        box_w = self.preview_border.winfo_width()
+        box_h = self.preview_border.winfo_height()
+        if box_w < 50 or box_h < 50:
+            box_w, box_h = 420, 260
         
         img_copy = pil_image.copy()
-        img_copy.thumbnail((box_w - 20, box_h - 20), Image.Resampling.LANCZOS)
+        img_copy.thumbnail((box_w - 16, box_h - 16), Image.Resampling.LANCZOS)
         
         tk_img = ImageTk.PhotoImage(img_copy)
         self.lbl_preview.config(image=tk_img, text="")
@@ -471,7 +551,6 @@ class QRCodeApp:
     def action_copy_image_to_clipboard(self):
         """Şu an önizlenen görseli doğrudan Windows Panosuna (Bitmap) kopyalar. Excel'de Ctrl+V ile resim yapışır!"""
         if self.current_badge_image is None:
-            # Otomatik oluşturmayı dene
             code_val = self.entry_tckn.get().strip()
             if code_val:
                 self.action_generate_code(silent=True)
@@ -503,7 +582,6 @@ class QRCodeApp:
         """Tabloda seçili satırları Excel uyumlu Tab-Separated (TSV) formatında panoya kopyalar."""
         selected = self.tree.selection()
         if not selected:
-            # Seçim yoksa tüm tabloyu kopyalamayı öner
             selected = self.tree.get_children()
             
         if not selected:
@@ -540,33 +618,31 @@ class QRCodeApp:
             messagebox.showwarning("Kayıt Bulunamadı", "Panodaki metinden geçerli bir kod veya kayıt çıkarılamadı.")
             return
             
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
         imported_count = 0
         skipped_count = 0
         
-        for w in workers_found:
-            name = w["name"]
-            surname = w["surname"]
-            code_val = w["tckn"]
-            try:
-                cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
-                               (name, surname, code_val, created_at))
-                imported_count += 1
-            except sqlite3.IntegrityError:
-                skipped_count += 1
-                
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            for w in workers_found:
+                name = w["name"]
+                surname = w["surname"]
+                code_val = w["tckn"]
+                try:
+                    cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                                   (name, surname, code_val, created_at))
+                    imported_count += 1
+                except sqlite3.IntegrityError:
+                    skipped_count += 1
+            conn.commit()
         
         self.refresh_worker_list()
         msg = f"✓ Panodan Tespit Edilen: {len(workers_found)} kayıt\n✓ Başarıyla Eklenen: {imported_count} yeni kayıt\n⚠ Atlanan (Sistemde Zaten Kayıtlı): {skipped_count}"
         messagebox.showinfo("Panodan Aktarım Başarılı", msg)
         self.set_status(f"Excel Panosundan {imported_count} kayıt eklendi.")
 
-    def action_export_excel_file(self):
-        """Tüm veya seçili kayıtları formatlı .xlsx Excel tablosu olarak kaydeder."""
+    def open_export_excel_dialog(self):
+        """Excel'e aktarma seçenekleri (Metin Tablosu vs Resimli Hücreler) sunar."""
         selected = self.tree.selection()
         if not selected:
             selected = self.tree.get_children()
@@ -574,34 +650,70 @@ class QRCodeApp:
         if not selected:
             messagebox.showwarning("Uyarı", "Excel'e aktarılacak kayıt bulunamadı.")
             return
-            
-        records = []
-        for item in selected:
-            vals = self.tree.item(item, "values")
-            if vals:
-                records.append(vals)
-                
-        default_filename = f"Barkod_Listesi_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=".xlsx",
-            filetypes=[("Excel Dosyası", "*.xlsx"), ("Tüm Dosyalar", "*.*")],
-            initialfile=default_filename
-        )
-        if not filepath:
-            return
-            
-        try:
-            qr_generator.export_records_to_excel(records, filepath)
-            messagebox.showinfo("Excel'e Aktarıldı", f"Toplam {len(records)} kayıt başarıyla Excel dosyasına kaydedildi:\n{filepath}")
-            self.set_status(f"Excel dosyası oluşturuldu: {filepath}")
-        except Exception as e:
-            messagebox.showerror("Hata", f"Excel dosyası kaydedilirken hata oluştu:\n{str(e)}")
+
+        records = [self.tree.item(item, "values") for item in selected if self.tree.item(item, "values")]
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Excel Dışa Aktarma Seçenekleri")
+        dialog.geometry("450x260")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="📊 Excel'e Aktar (.xlsx)", font=("Segoe UI", 12, "bold")).pack(pady=(15, 8))
+        ttk.Label(dialog, text=f"Toplam {len(records)} kayıt aktarılacak. Formatı seçiniz:", style="Normal.TLabel").pack(pady=(0, 10))
+
+        var_opt = tk.StringVar(value="with_images")
+
+        rb1 = ttk.Radiobutton(dialog, text="🖼️ Görselli Excel Tablosu (Barkod resimleri hücrelere gömülür)", value="with_images", variable=var_opt)
+        rb1.pack(anchor="w", padx=25, pady=4)
+
+        rb2 = ttk.Radiobutton(dialog, text="📄 Standart Metin Tablosu (Hızlı & Sade veri tablosu)", value="text_only", variable=var_opt)
+        rb2.pack(anchor="w", padx=25, pady=4)
+
+        def do_export():
+            dialog.destroy()
+            default_filename = f"Barkod_Listesi_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel Dosyası", "*.xlsx"), ("Tüm Dosyalar", "*.*")],
+                initialfile=default_filename
+            )
+            if not filepath:
+                return
+
+            include_img = (var_opt.get() == "with_images")
+            code_mode = self.var_code_mode.get()
+            b_type = self.get_clean_barcode_type()
+
+            self.set_status("Excel dosyası oluşturuluyor, lütfen bekleyiniz...")
+            self.root.update_idletasks()
+
+            try:
+                qr_generator.export_records_to_excel(
+                    records=records,
+                    filepath=filepath,
+                    include_images=include_img,
+                    code_mode=code_mode,
+                    barcode_type=b_type
+                )
+                messagebox.showinfo("Excel'e Aktarıldı", f"Toplam {len(records)} kayıt başarıyla Excel dosyasına aktarıldı:\n{filepath}")
+                self.set_status(f"Excel dosyası oluşturuldu: {filepath}")
+            except Exception as e:
+                messagebox.showerror("Hata", f"Excel kaydedilirken hata oluştu:\n{str(e)}")
+                self.set_status("Excel aktarımında hata oluştu.")
+
+        btn_box = ttk.Frame(dialog, padding=15)
+        btn_box.pack(fill="x", side="bottom")
+
+        ttk.Button(btn_box, text="Dışa Aktar", style="Excel.TButton", command=do_export).pack(side="right", padx=(5, 0))
+        ttk.Button(btn_box, text="İptal", style="Action.TButton", command=dialog.destroy).pack(side="right", padx=(0, 5))
 
     def open_serial_generator_dialog(self):
         """Toplu sıralı / seri barkod üretim penceresini açar."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Sıralı / Seri Barkod Üretici")
-        dialog.geometry("480x360")
+        dialog.geometry("480x370")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -661,20 +773,19 @@ class QRCodeApp:
                 name_template=name_tpl
             )
 
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             added = 0
             skipped = 0
-            for itm in items:
-                try:
-                    cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
-                                   (itm["name"], itm["surname"], itm["tckn"], created_at))
-                    added += 1
-                except sqlite3.IntegrityError:
-                    skipped += 1
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                for itm in items:
+                    try:
+                        cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                                       (itm["name"], itm["surname"], itm["tckn"], created_at))
+                        added += 1
+                    except sqlite3.IntegrityError:
+                        skipped += 1
+                conn.commit()
 
             self.refresh_worker_list()
             messagebox.showinfo("Seri Üretim Tamamlandı", f"✓ {added} adet sıralı barkod listeye eklendi.\n⚠ Atlanan (Zaten Kayıtlı): {skipped}")
@@ -692,49 +803,77 @@ class QRCodeApp:
         surname = self.entry_surname.get().strip()
         code_val = self.entry_tckn.get().strip()
         strict = self.var_strict_tckn.get()
+        barcode_type = self.get_clean_barcode_type()
         
-        is_valid, msg = qr_generator.validate_code_value(code_val, strict_tckn=strict)
+        is_valid, msg = qr_generator.validate_code_value(code_val, strict_tckn=strict, barcode_type=barcode_type)
         if not is_valid:
             messagebox.showwarning("Geçersiz Değer", msg)
             return
             
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
         try:
-            cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
-                           (name, surname, code_val, created_at))
-            conn.commit()
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                               (name, surname, code_val, created_at))
+                conn.commit()
             label_disp = f"'{name} {surname}' ({code_val})" if (name or surname) else f"'{code_val}'"
             messagebox.showinfo("Başarılı", f"Kayıt {label_disp} başarıyla kaydedildi.")
             self.refresh_worker_list()
         except sqlite3.IntegrityError:
             messagebox.showerror("Hata", "Bu kod değeri sistemde zaten kayıtlı!")
-        finally:
-            conn.close()
+
+    def sort_tree_column(self, col: str, reverse: bool):
+        """Tablodaki verileri tıklanan sütun başlığına göre sıralar."""
+        data = [(self.tree.set(child, col), child) for child in self.tree.get_children("")]
+        
+        # ID veya sayısal sütunlar için int sıralaması
+        if col == "id":
+            try:
+                data.sort(key=lambda t: int(t[0]), reverse=reverse)
+            except ValueError:
+                data.sort(reverse=reverse)
+        else:
+            data.sort(reverse=reverse)
+
+        for index, (_, child) in enumerate(data):
+            self.tree.move(child, "", index)
+
+        # Başlık ok göstergelerini güncelle
+        headings = {
+            "id": "ID",
+            "name": "İsim / Başlık",
+            "surname": "Soyisim / Detay",
+            "tckn": "Barkod / Kod Değeri",
+            "created_at": "Kayıt Tarihi"
+        }
+        for c, title in headings.items():
+            if c == col:
+                arrow = " 🔽" if reverse else " 🔼"
+                self.tree.heading(c, text=f"{title}{arrow}", command=lambda c=c: self.sort_tree_column(c, not reverse))
+            else:
+                self.tree.heading(c, text=f"{title} ↕", command=lambda c=c: self.sort_tree_column(c, False))
 
     def refresh_worker_list(self, query: str = ""):
         """Veritabanındaki listeyi tabloya doldurur."""
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        
-        if query:
-            q = f"%{query}%"
-            cursor.execute("SELECT id, name, surname, tckn, created_at FROM workers WHERE name LIKE ? OR surname LIKE ? OR tckn LIKE ?", (q, q, q))
-        else:
-            cursor.execute("SELECT id, name, surname, tckn, created_at FROM workers ORDER BY id DESC")
-            
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            if query:
+                q = f"%{query}%"
+                cursor.execute("SELECT id, name, surname, tckn, created_at FROM workers WHERE name LIKE ? OR surname LIKE ? OR tckn LIKE ?", (q, q, q))
+            else:
+                cursor.execute("SELECT id, name, surname, tckn, created_at FROM workers ORDER BY id DESC")
+            rows = cursor.fetchall()
         
         for row in rows:
             self.tree.insert("", "end", values=row)
 
         self.lbl_table_title.config(text=f"Kayıtlı Kodlar Listesi ({len(rows)} Kayıt)")
+        self.status_counter.config(text=f"Toplam: {len(rows)} Kayıt")
 
     def on_search(self, event):
         """Arama kutusuna yazıldıkça tabloyu filtreler."""
@@ -742,10 +881,15 @@ class QRCodeApp:
         self.refresh_worker_list(q)
 
     def on_tree_select(self, event):
-        """Tablodan bir kayıt seçildiğinde forma doldurur ve barkod oluşturur."""
+        """Tablodan bir kayıt seçildiğinde forma doldurur, istatistik günceller ve barkod oluşturur."""
         selected = self.tree.selection()
         if not selected:
             return
+            
+        sel_count = len(selected)
+        total_count = len(self.tree.get_children())
+        self.status_counter.config(text=f"Seçilen: {sel_count} / Toplam: {total_count}")
+        
         item_values = self.tree.item(selected[0], "values")
         if item_values:
             _, name, surname, code_val, _ = item_values
@@ -760,6 +904,12 @@ class QRCodeApp:
             self.entry_tckn.insert(0, code_val)
             
             self.action_generate_code(silent=True)
+
+    def on_tree_double_click(self, event):
+        """Çift tıklandığında hızlı yazdırma veya önizleme penceresini hedefler."""
+        selected = self.tree.selection()
+        if selected:
+            self.action_generate_code()
 
     def action_print_current(self):
         """Şu an önizlenen kartı yazıcı seçimi penceresi açarak yazdırır."""
@@ -914,15 +1064,14 @@ class QRCodeApp:
         count = len(selected)
         confirm = messagebox.askyesno("Silme Onayı", f"Seçilen {count} adet kaydı silmek istediğinize emin misiniz?")
         if confirm:
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            for item in selected:
-                item_values = self.tree.item(item, "values")
-                if item_values:
-                    worker_id = item_values[0]
-                    cursor.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                for item in selected:
+                    item_values = self.tree.item(item, "values")
+                    if item_values:
+                        worker_id = item_values[0]
+                        cursor.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                conn.commit()
             
             messagebox.showinfo("Silindi", f"{count} adet kayıt başarıyla silindi.")
             self.refresh_worker_list()
@@ -942,25 +1091,21 @@ class QRCodeApp:
 
             imported_count = 0
             skipped_count = 0
-            
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            for w in workers_found:
-                name = w["name"]
-                surname = w["surname"]
-                code_val = w["tckn"]
-                
-                try:
-                    cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
-                                   (name, surname, code_val, created_at))
-                    imported_count += 1
-                except sqlite3.IntegrityError:
-                    skipped_count += 1
-                    
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                for w in workers_found:
+                    name = w["name"]
+                    surname = w["surname"]
+                    code_val = w["tckn"]
+                    try:
+                        cursor.execute("INSERT INTO workers (name, surname, tckn, created_at) VALUES (?, ?, ?, ?)",
+                                       (name, surname, code_val, created_at))
+                        imported_count += 1
+                    except sqlite3.IntegrityError:
+                        skipped_count += 1
+                conn.commit()
             
             msg = f"✓ Toplam Tespit Edilen: {len(workers_found)} kayıt\n✓ İçe Aktarılan: {imported_count} yeni kayıt\n⚠ Atlanan (Sistemde Zaten Kayıtlı): {skipped_count}"
             messagebox.showinfo("İçe Aktarma Başarılı", msg)
@@ -972,11 +1117,10 @@ class QRCodeApp:
 
     def action_export_bulk_dialog(self):
         """Kullanıcıya QR, Barkod veya Kart formatında toplu dışa aktarma penceresi sunar."""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, surname, tckn FROM workers")
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, surname, tckn FROM workers")
+            rows = cursor.fetchall()
         
         if not rows:
             messagebox.showwarning("Uyarı", "Sistemde kayıtlı veri bulunamadı.")

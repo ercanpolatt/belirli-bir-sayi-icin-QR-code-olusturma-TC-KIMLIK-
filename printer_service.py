@@ -1,6 +1,6 @@
 """
 Windows Yazıcı Hizmeti Modülü
-Sistemde tanımlı yazıcıları listeler ve seçilen yazıcıya QR kartı görselini gönderir.
+Sistemde tanımlı yazıcıları listeler ve seçilen yazıcıya QR/Barkod kartı görselini gönderir.
 """
 import os
 import tempfile
@@ -60,11 +60,11 @@ def print_image_to_printer(image: Image.Image, printer_name: str = None, doc_nam
         aspect_ratio = img_w / img_h
         
         # Sayfaya uygun hedef boyut belirleme (Etiket veya A4 sayfasının üst kısmına uygun)
-        target_w = int(printable_width * 0.8)
+        target_w = int(printable_width * 0.85)
         target_h = int(target_w / aspect_ratio)
         
-        if target_h > int(printable_height * 0.8):
-            target_h = int(printable_height * 0.8)
+        if target_h > int(printable_height * 0.85):
+            target_h = int(printable_height * 0.85)
             target_w = int(target_h * aspect_ratio)
             
         # Merkeze hizalama
@@ -160,4 +160,3 @@ def print_images_to_printer(images: list[Image.Image], printer_name: str = None,
             return True, f"Yazdırma pencereleri açıldı ({len(images)} sayfa)."
         except Exception as alt_err:
             return False, f"Yazdırma hatası: {str(e)} / {str(alt_err)}"
-

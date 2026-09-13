@@ -1,12 +1,13 @@
-# Barkod & QR Kod Oluşturma, Yazdırma ve Excel Entegrasyon Programı
+# Barkod & QR Kod Studio | Excel & Baskı Entegrasyonu
 
-Bu masaüstü uygulaması; **belirlediğiniz herhangi bir sayı, harf, seri numarası, ürün kodu veya TC Kimlik Numarası** ile endüstri standardında **1D Çizgi Barkodlar (Code 128 & Code 39)** ve **2D QR Kodlar (Karekod)** üretmenizi, doğrudan Windows panosuna kopyalayarak **Excel'e `Ctrl+V` ile resim olarak yapıştırmanızı**, Excel tabloları ile çift yönlü senkronizasyon yapmanızı ve Windows yazıcınızdan tekli veya A4 sayfasında 3'lü dizilimle (300 DPI) çıktı almanızı sağlar.
+Bu masaüstü uygulaması; **belirlediğiniz herhangi bir sayı, harf, seri numarası, ürün kodu veya TC Kimlik Numarası** ile endüstri standardında **1D Çizgi Barkodlar (Code 128, Code 39, EAN-13, EAN-8, UPC-A)** ve **2D QR Kodlar (Karekod)** üretmenizi, doğrudan Windows panosuna kopyalayarak **Excel'e `Ctrl+V` ile resim olarak yapıştırmanızı**, Excel tabloları ile çift yönlü senkronizasyon yapmanızı ve Windows yazıcınızdan tekli veya A4 sayfasında 3'lü dizilimle (300 DPI) çıktı almanızı sağlar.
 
 ---
 
 ## 🚀 Öne Çıkan Özellikler
 
 ### 📊 1. Gelişmiş Excel & Pano Entegrasyonu
+- **🖼️ Barkod Görsellerini Excel Hücrelerine Gömerek Aktarma:** Tablodaki kayıtları Excel'e aktarırken her satırın yanındaki sütuna gerçek barkod/QR kod görselini otomatik gömer.
 - **🖼️ Barkod Görselini Panoya Kopyalama (`Ctrl+Shift+C`):** Oluşturulan barkodu dosyaya kaydetmeye gerek kalmadan panoya kopyalar. Excel'e geçip herhangi bir hücreye **`Ctrl+V`** yaptığınızda **barkod görseli doğrudan Excel'e yapışır!**
 - **📋 Tabloyu Excel Formatında Kopyalama (`Ctrl+C`):** Tablodan seçtiğiniz satırları `Ctrl+C` ile kopyalayıp Excel'e yapıştırdığınızda veriler ayrı ayrı sütunlara otomatik yerleşir.
 - **📥 Excel Panosundan Hızlı Aktarım (`Ctrl+V`):** Excel'de kopyaladığınız satırları dosya açma zahmetine girmeden **"📋 Excel Panosundan Aktar"** butonu veya `Ctrl+V` ile anında sisteme ekler.
@@ -20,9 +21,10 @@ Bu masaüstü uygulaması; **belirlediğiniz herhangi bir sayı, harf, seri numa
 - **Yazıcı Seçimi:** Sistemdeki tüm yerel ve ağ yazıcılarını listeleyip istenilen yazıcıya doğrudan gönderir.
 
 ### 📱 4. Kod Standartları & Esneklik
-- **Serbest Sayı ve Harf Girişi:** TC Kimlik zorunluluğu olmaksızın her türlü sayı, harf ve sembolle barkod üretimi.
-- **Code 128 (Evrensel) & Code 39 (Endüstriyel):** Tüm lazer ve kamera tabanlı barkod okuyucularla tam uyumlu.
+- **Çoklu Barkod Formatları:** Code 128 (Evrensel), Code 39 (Alfanümerik), EAN-13 (Perakende), EAN-8 ve UPC-A standartları.
 - **QR Kod & Kombine Kart (QR + Barkod):** Çift okuyucu destekli yaka kartı ve etiket tasarımı.
+- **Dinamik Önizleme & High-DPI:** Yüksek çözünürlüklü ekranlarda net tipografi ve pencere boyutuna göre orantılı canlı önizleme.
+- **Sütun Sıralama (A-Z / Z-A):** Tablo sütun başlıklarına tıklayarak ID, İsim, Soyisim, Kod ve Tarihe göre artan/azalan anlık sıralama.
 - **İsteğe Bağlı Sıkı TC Kimlik Kontrolü:** 11 haneli matematiksel TC algoritma doğrulamasını tek tıkla açıp kapatabilme.
 
 ---
