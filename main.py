@@ -319,7 +319,8 @@ class QRCodeApp:
         # Sağ Tık Menüsü (Context Menu)
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(label="📊 Seçilenleri Excel Formatında Kopyala (Ctrl+C)", command=self.action_copy_table_selection)
-        self.context_menu.add_command(label="🖼️ Seçili Barkod Görselini Kopyala (Ctrl+Shift+C)", command=self.action_copy_image_to_clipboard)
+        self.context_menu.add_command(label="🖼️ Önizlemedeki Tekli Görseli Kopyala (Ctrl+Shift+C)", command=self.action_copy_image_to_clipboard)
+        self.context_menu.add_command(label="📑 Tüm Seçilenlerin A4 Çıktısını Kopyala (Word'e Yapıştır)", command=self.action_copy_selected_as_a4_to_clipboard)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="📋 Excel Panosundan Yapıştır (Ctrl+V)", command=self.action_paste_from_clipboard)
         self.context_menu.add_separator()
@@ -356,9 +357,11 @@ class QRCodeApp:
         
         btn_export_bulk = ttk.Button(bottom_btn_frame, text="📁 Toplu Resim Aktar...", style="Action.TButton", command=self.action_export_bulk_dialog)
         btn_export_bulk.pack(side="left", padx=4)
-        
-        btn_delete = ttk.Button(bottom_btn_frame, text="🗑️ Sil", style="Danger.TButton", command=self.action_delete_worker)
+        btn_delete = ttk.Button(bottom_btn_frame, text="🗑️ Seçileni Sil", style="Danger.TButton", command=self.action_delete_worker)
         btn_delete.pack(side="right")
+        
+        btn_delete_all = ttk.Button(bottom_btn_frame, text="🧨 Tümünü Temizle", style="Danger.TButton", command=self.action_delete_all_workers)
+        btn_delete_all.pack(side="right", padx=(0, 4))
 
         # 3. En Alt Durum Çubuğu
         self.status_bar_frame = ttk.Frame(self.root, style="Header.TFrame", padding=(15, 6))
@@ -567,6 +570,50 @@ class QRCodeApp:
             messagebox.showinfo("Panoya Kopyalandı", msg)
         else:
             messagebox.showerror("Hata", "Görsel panoya kopyalanırken hata oluştu.")
+
+    def action_copy_selected_as_a4_to_clipboard(self):
+        """Tabloda seçili kayıtları A4 sayfalarına dizip Word'e yapıştırılabilir şekilde panoya kopyalar."""
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Uyarı", "Lütfen önce tablodan kopyalanacak kayıtları seçiniz.")
+            return
+            
+        workers = []
+        for item in selected:
+            item_values = self.tree.item(item, "values")
+            if item_values:
+                _, name, surname, code_val, _ = item_values
+                workers.append((name, surname, str(code_val)))
+                
+        code_mode = self.var_code_mode.get()
+        barcode_type = self.get_clean_barcode_type()
+        show_text = self.var_show_barcode_text.get()
+        company = self.var_company_title.get().strip()
+        
+        self.set_status("A4 sayfaları oluşturuluyor, lütfen bekleyiniz...")
+        self.root.update_idletasks()
+        
+        pages = qr_generator.create_grid_printable_pages(
+            workers,
+            items_per_row=3,
+            rows_per_page=4,
+            code_mode=code_mode,
+            barcode_type=barcode_type,
+            show_barcode_text=show_text,
+            company_title=company
+        )
+        
+        if not pages:
+            self.set_status("Kopyalanacak görsel oluşturulamadı.")
+            return
+            
+        success = qr_generator.copy_files_to_clipboard_as_hdrop(pages)
+        if success:
+            messagebox.showinfo("Kopyalandı", f"{len(workers)} kayıt {len(pages)} sayfa A4 düzeninde panoya kopyalandı.\nWord'e geçip Ctrl+V ile yapıştırdığınızda sayfalar halinde dizilecektir!")
+            self.set_status(f"{len(pages)} sayfa A4 görseli panoya kopyalandı.")
+        else:
+            messagebox.showerror("Hata", "Panoya kopyalama başarısız oldu.")
+            self.set_status("Pano hatası.")
 
     def action_copy_tc(self):
         """Barkod / Kod metin değerini panoya kopyalar."""
@@ -1076,6 +1123,27 @@ class QRCodeApp:
             messagebox.showinfo("Silindi", f"{count} adet kayıt başarıyla silindi.")
             self.refresh_worker_list()
 
+    def action_delete_all_workers(self):
+        """Veritabanındaki tüm kayıtları temizler."""
+        items = self.tree.get_children()
+        if not items:
+            messagebox.showwarning("Uyarı", "Tablo zaten boş.")
+            return
+            
+        confirm = messagebox.askyesno(
+            "Tümünü Temizleme Onayı", 
+            "DİKKAT: Tablodaki TÜM kayıtları silmek istediğinize emin misiniz?\nBu işlem geri alınamaz!",
+            icon='warning'
+        )
+        if confirm:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM workers")
+                conn.commit()
+            
+            messagebox.showinfo("Temizlendi", "Tüm kayıtlar başarıyla silindi.")
+            self.refresh_worker_list()
+
     def action_import_excel(self):
         """Excel veya CSV dosyasından toplu kayıt aktarır."""
         filepath = filedialog.askopenfilename(filetypes=[("Excel / CSV Dosyaları", "*.xlsx *.csv *.xls"), ("Tüm Dosyalar", "*.*")])
@@ -1128,7 +1196,7 @@ class QRCodeApp:
 
         export_dialog = tk.Toplevel(self.root)
         export_dialog.title("Toplu Görsel Dışa Aktarma")
-        export_dialog.geometry("450x290")
+        export_dialog.geometry("450x330")
         export_dialog.resizable(False, False)
         export_dialog.transient(self.root)
         export_dialog.grab_set()
@@ -1147,6 +1215,9 @@ class QRCodeApp:
 
         rb2 = ttk.Radiobutton(content_frame, text="📱 Yalnızca QR Kodlar (.png)", value="qr_only", variable=var_bulk_type)
         rb2.pack(anchor="w", pady=3)
+
+        rb_qr_text = ttk.Radiobutton(content_frame, text="👤 QR Kod + İsim/TC Alt Alta (.png)", value="qr_with_text", variable=var_bulk_type)
+        rb_qr_text.pack(anchor="w", pady=3)
 
         rb3 = ttk.Radiobutton(content_frame, text="📇 Hazır Baskı Kartları / Etiketleri (.png)", value="cards", variable=var_bulk_type)
         rb3.pack(anchor="w", pady=3)
@@ -1179,6 +1250,9 @@ class QRCodeApp:
                         company_title=company
                     )
                     file_name = f"KART_{clean_name}{code_val}.png"
+                elif export_type == "qr_with_text":
+                    img = qr_generator.generate_qr_with_text(code_val, name, surname, show_text=show_text)
+                    file_name = f"QR_ISIMLI_{clean_name}{code_val}.png"
                 elif export_type == "qr_only":
                     img = qr_generator.generate_qr_image(code_val, box_size=12)
                     file_name = f"QR_{clean_name}{code_val}.png"

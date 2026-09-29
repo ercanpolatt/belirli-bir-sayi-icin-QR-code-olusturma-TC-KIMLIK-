@@ -65,6 +65,38 @@ def copy_image_to_clipboard(pil_image: Image.Image) -> bool:
         return False
 
 
+def copy_files_to_clipboard_as_hdrop(images: list[Image.Image]) -> bool:
+    """
+    Verilen PIL Image listesini geçici dosyalara kaydeder ve Windows panosuna (CF_HDROP) kopyalar.
+    Word vb. programlara Ctrl+V ile doğrudan çoklu resim (dosya) olarak yapıştırılmasını sağlar.
+    """
+    import struct
+    if not images:
+        return False
+        
+    try:
+        temp_dir = tempfile.mkdtemp()
+        file_paths = []
+        for idx, img in enumerate(images):
+            path = os.path.abspath(os.path.join(temp_dir, f"Sayfa_{idx+1}.png"))
+            img.save(path, format="PNG")
+            file_paths.append(path)
+            
+        paths_str = "\0".join(file_paths) + "\0\0"
+        encoded_paths = paths_str.encode("utf-16le")
+        dropfiles = struct.pack("IIIII", 20, 0, 0, 0, 1)
+        data = dropfiles + encoded_paths
+        
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_HDROP, data)
+        win32clipboard.CloseClipboard()
+        return True
+    except Exception as e:
+        print(f"Pano CF_HDROP hatası: {e}")
+        return False
+
+
 def sanitize_for_barcode(text: str, barcode_type: str = "code128") -> tuple[str, str]:
     """
     Barkod üretimi için metni normalize eder ve seçilen barkod tipine uygunluğunu denetler.
@@ -193,6 +225,45 @@ def generate_qr_image(data: str, box_size: int = 10, border: int = 2) -> Image.I
     
     img = qr.make_image(fill_color="black", back_color="white")
     return img.convert("RGB")
+
+
+def generate_qr_with_text(data: str, name: str = "", surname: str = "", box_size: int = 12, border: int = 2, show_text: bool = True) -> Image.Image:
+    """
+    QR kod görseli oluşturur ve altına ismini ve istenirse TC (veya Kod) değerini yazar.
+    """
+    qr_img = generate_qr_image(data, box_size=box_size, border=border)
+    
+    font_name = get_system_font(26, bold=True)
+    font_code = get_system_font(18, bold=False)
+    
+    full_name = f"{str(name).upper()} {str(surname).upper()}".strip()
+    code_str = str(data).strip()
+    
+    extra_height = 80 if full_name else 40
+    new_width = max(qr_img.width, 300)
+    new_height = qr_img.height + extra_height
+    
+    combined = Image.new("RGB", (new_width, new_height), "white")
+    
+    qr_x = (new_width - qr_img.width) // 2
+    combined.paste(qr_img, (qr_x, 0))
+    
+    draw = ImageDraw.Draw(combined)
+    current_y = qr_img.height + 5
+    
+    if full_name:
+        bbox = draw.textbbox((0, 0), full_name, font=font_name)
+        text_w = bbox[2] - bbox[0]
+        draw.text(((new_width - text_w) // 2, current_y), full_name, fill="#0F172A", font=font_name)
+        current_y += 35
+        
+    if show_text:
+        lbl_str = f"TC/KOD: {code_str}"
+        bbox_lbl = draw.textbbox((0, 0), lbl_str, font=font_code)
+        lbl_w = bbox_lbl[2] - bbox_lbl[0]
+        draw.text(((new_width - lbl_w) // 2, current_y), lbl_str, fill="#475569", font=font_code)
+    
+    return combined
 
 
 def generate_barcode_image(
@@ -344,10 +415,11 @@ def create_printable_badge(
             draw.text(((width - text_w) // 2, current_y), full_name, fill="#0F172A", font=font_name)
             current_y += 55
             
-        lbl_str = f"{label_prefix}: {code_str}"
-        bbox_lbl = draw.textbbox((0, 0), lbl_str, font=font_code)
-        lbl_w = bbox_lbl[2] - bbox_lbl[0]
-        draw.text(((width - lbl_w) // 2, current_y), lbl_str, fill="#475569", font=font_code)
+        if show_barcode_text:
+            lbl_str = f"{label_prefix}: {code_str}"
+            bbox_lbl = draw.textbbox((0, 0), lbl_str, font=font_code)
+            lbl_w = bbox_lbl[2] - bbox_lbl[0]
+            draw.text(((width - lbl_w) // 2, current_y), lbl_str, fill="#475569", font=font_code)
 
     # 2. YALNIZCA BARKOD MODU
     elif code_mode == "barcode":
@@ -450,8 +522,8 @@ def create_grid_printable_pages(
     capacity_per_page = items_per_row * rows_per_page
     pages = []
     
-    font_name = get_system_font(34, bold=True)
-    font_tc = get_system_font(24, bold=False)
+    font_name = get_system_font(56, bold=True)
+    font_tc = get_system_font(36, bold=False)
 
     current_page = None
     draw = None
@@ -478,40 +550,77 @@ def create_grid_printable_pages(
         label_prefix = "TC" if (len(code_str) == 11 and code_str.isdigit()) else "KOD"
 
         if code_mode == "qr":
-            qr_img = generate_qr_image(code_str, box_size=12, border=2)
+            qr_img = generate_qr_image(code_str, box_size=20, border=2)
             qr_w, qr_h = qr_img.size
             qr_x = x + (cell_w - qr_w) // 2
-            qr_y = y + (30 if has_name else 60)
+            qr_y = y + (50 if has_name else 120)
             current_page.paste(qr_img, (qr_x, qr_y))
             
-            cur_y = qr_y + qr_h + 15
+            cur_y = qr_y + qr_h + 30
             if has_name:
                 bbox = draw.textbbox((0, 0), full_name, font=font_name)
                 text_w = bbox[2] - bbox[0]
                 draw.text((x + (cell_w - text_w) // 2, cur_y), full_name, fill="#000000", font=font_name)
-                cur_y += 45
+                cur_y += 75
                 
-            tc_str = f"{label_prefix}: {code_str}"
-            bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
-            tc_w = bbox_tc[2] - bbox_tc[0]
-            draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
+            if show_barcode_text:
+                tc_str = f"{label_prefix}: {code_str}"
+                bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
+                tc_w = bbox_tc[2] - bbox_tc[0]
+                draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
 
         elif code_mode == "barcode":
             bc_img = generate_barcode_image(
                 code_str,
                 barcode_type=barcode_type,
                 show_text=show_barcode_text,
-                module_width=0.44,
-                module_height=24.0,
-                font_size=16
+                module_width=0.75,
+                module_height=45.0,
+                font_size=26
             )
-            if bc_img.width > (cell_w - 40):
-                ratio = (cell_w - 40) / bc_img.width
-                bc_img = bc_img.resize((cell_w - 40, int(bc_img.height * ratio)), Image.Resampling.LANCZOS)
+            if bc_img.width > (cell_w - 60):
+                ratio = (cell_w - 60) / bc_img.width
+                bc_img = bc_img.resize((cell_w - 60, int(bc_img.height * ratio)), Image.Resampling.LANCZOS)
                 
             bc_w, bc_h = bc_img.size
             bc_x = x + (cell_w - bc_w) // 2
-            bc_y = y + (140 if has_name else 180)
+            bc_y = y + (160 if has_name else 220)
+            current_page.paste(bc_img, (bc_x, bc_y))
+            
+            cur_y = bc_y + bc_h + 40
+            if has_name:
+                bbox = draw.textbbox((0, 0), full_name, font=font_name)
+                text_w = bbox[2] - bbox[0]
+                draw.text((x + (cell_w - text_w) // 2, cur_y), full_name, fill="#000000", font=font_name)
+            else:
+                if show_barcode_text:
+                    tc_str = f"{label_prefix}: {code_str}"
+                    bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
+                    tc_w = bbox_tc[2] - bbox_tc[0]
+                    draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
+
+        else:
+            qr_img = generate_qr_image(code_str, box_size=15, border=2)
+            qr_w, qr_h = qr_img.size
+            qr_x = x + (cell_w - qr_w) // 2
+            qr_y = y + 40
+            current_page.paste(qr_img, (qr_x, qr_y))
+            
+            bc_img = generate_barcode_image(
+                code_str,
+                barcode_type=barcode_type,
+                show_text=show_barcode_text,
+                module_width=0.6,
+                module_height=25.0,
+                font_size=20
+            )
+            if bc_img.width > (cell_w - 60):
+                ratio = (cell_w - 60) / bc_img.width
+                bc_img = bc_img.resize((cell_w - 60, int(bc_img.height * ratio)), Image.Resampling.LANCZOS)
+                
+            bc_w, bc_h = bc_img.size
+            bc_x = x + (cell_w - bc_w) // 2
+            bc_y = qr_y + qr_h + 20
             current_page.paste(bc_img, (bc_x, bc_y))
             
             cur_y = bc_y + bc_h + 30
@@ -520,45 +629,11 @@ def create_grid_printable_pages(
                 text_w = bbox[2] - bbox[0]
                 draw.text((x + (cell_w - text_w) // 2, cur_y), full_name, fill="#000000", font=font_name)
             else:
-                tc_str = f"{label_prefix}: {code_str}"
-                bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
-                tc_w = bbox_tc[2] - bbox_tc[0]
-                draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
-
-        else:
-            qr_img = generate_qr_image(code_str, box_size=8, border=2)
-            qr_w, qr_h = qr_img.size
-            qr_x = x + (cell_w - qr_w) // 2
-            qr_y = y + 25
-            current_page.paste(qr_img, (qr_x, qr_y))
-            
-            bc_img = generate_barcode_image(
-                code_str,
-                barcode_type=barcode_type,
-                show_text=show_barcode_text,
-                module_width=0.38,
-                module_height=12.0,
-                font_size=14
-            )
-            if bc_img.width > (cell_w - 40):
-                ratio = (cell_w - 40) / bc_img.width
-                bc_img = bc_img.resize((cell_w - 40, int(bc_img.height * ratio)), Image.Resampling.LANCZOS)
-                
-            bc_w, bc_h = bc_img.size
-            bc_x = x + (cell_w - bc_w) // 2
-            bc_y = qr_y + qr_h + 15
-            current_page.paste(bc_img, (bc_x, bc_y))
-            
-            cur_y = bc_y + bc_h + 18
-            if has_name:
-                bbox = draw.textbbox((0, 0), full_name, font=font_name)
-                text_w = bbox[2] - bbox[0]
-                draw.text((x + (cell_w - text_w) // 2, cur_y), full_name, fill="#000000", font=font_name)
-            else:
-                tc_str = f"{label_prefix}: {code_str}"
-                bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
-                tc_w = bbox_tc[2] - bbox_tc[0]
-                draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
+                if show_barcode_text:
+                    tc_str = f"{label_prefix}: {code_str}"
+                    bbox_tc = draw.textbbox((0, 0), tc_str, font=font_tc)
+                    tc_w = bbox_tc[2] - bbox_tc[0]
+                    draw.text((x + (cell_w - tc_w) // 2, cur_y), tc_str, fill="#64748B", font=font_tc)
 
     return pages
 
