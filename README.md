@@ -34,30 +34,32 @@ Barkod & QR Kod Studio, özellikle TC Kimlik numaraları, personel kodları, ür
 
 ---
 
-## 📸 Ekran Görüntüleri ve Kullanım
+## 📸 Ekran Görüntüleri ve Özellikler
 
-> **Not:** Lütfen uygulamanın ekran görüntülerini ve örnek çıktılarını proje klasöründeki `assets` veya `images` klasörüne ekleyip aşağıdaki bağlantıları güncelleyiniz.
+Uygulamanın modern ve kullanımı kolay arayüzü sayesinde işlemlerinizi saniyeler içinde tamamlayabilirsiniz. İster tekli ister toplu olsun, barkod ve QR kod üretim süreci tamamen hız ve görsellik üzerine tasarlanmıştır.
 
 <div align="center">
-  <img src="https://via.placeholder.com/800x450.png?text=Ana+Arayuz+Ekrani" alt="Ana Arayüz" width="800"/>
-  <p><i>Uygulama Ana Arayüzü ve Canlı Önizleme Paneli</i></p>
+  <img src="photos/uygulama%20arayuzu.png" alt="Ana Arayüz" width="800"/>
+  <p><i>Geniş, Detaylı ve Kullanıcı Dostu Uygulama Arayüzü</i></p>
 </div>
 
 <br/>
 
-### 1. Barkod ve QR Oluşturma
-Sadece kodu (veya TC Kimlik no) girin. İsteğe bağlı olarak İsim, Soyisim ve Kurum Başlığı ekleyebilirsiniz. Sistem, geçersiz TC numaralarında sizi uyarır.
+### 1. Toplu A4 Formatında Çıktı ve Baskı
+Oluşturduğunuz tüm kodları otomatik hesaplayarak A4 boyutlarına uygun, şık bir grid (ızgara) sisteminde dizer. Bu sayede seçtiğiniz onlarca personelin veya ürünün kodlarını tek bir hamleyle A4 kağıdına yazdırabilir, Word veya Excel dosyalarına kalitesi bozulmadan kopyalayabilirsiniz.
 
 <div align="center">
-  <img src="https://via.placeholder.com/400x300.png?text=Barkod+Olusturma" alt="Kayıt" width="400"/>
-  <img src="https://via.placeholder.com/400x300.png?text=QR+ve+Kombine+Mod" alt="Modlar" width="400"/>
+  <img src="photos/toplu%20a4%20formati.png" alt="A4 Baskı Modu" width="700"/>
+  <p><i>A4 Sayfa Grid Dizilimi ve Profesyonel Baskı Çıktısı</i></p>
 </div>
 
-### 2. Excel'e Görselli Aktarım
-Tablodaki seçili kayıtları veya tümünü, barkod görselleri hücrelere yerleştirilmiş biçimde Excel (.xlsx) olarak dışa aktarabilirsiniz.
+### 2. Yüksek Kaliteli PNG Çıktısı ve Tekli Kayıt
+Her bir barkod veya QR kod, standartlara uygun ve yüksek kalitede üretilir. Kodu anında PNG olarak kaydedebilir veya "Görseli Kopyala" diyerek doğrudan başka bir uygulamaya (Photoshop, Illustrator, Excel vb.) yapıştırabilirsiniz.
 
-### 3. A4 Toplu Baskı
-Oluşturduğunuz kodları A4 kağıdına uygun grid sisteminde dizer. İster doğrudan yazdırın, ister Word'e yapıştırın.
+<div align="center">
+  <img src="photos/png%20formati%20.png" alt="PNG Formatında Çıktı" width="350"/>
+  <p><i>Detaylı, Okunabilir ve Temiz PNG Kod Formatı</i></p>
+</div>
 
 ---
 
