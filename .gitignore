@@ -4,3 +4,4 @@ workers.db
 *.png
 .idea/
 .vscode/
+!photos/*.png
