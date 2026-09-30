@@ -1,50 +1,130 @@
-# Barkod & QR Kod Studio | Excel & Baskı Entegrasyonu
+<div align="center">
 
-Bu masaüstü uygulaması; **belirlediğiniz herhangi bir sayı, harf, seri numarası, ürün kodu veya TC Kimlik Numarası** ile endüstri standardında **1D Çizgi Barkodlar (Code 128, Code 39, EAN-13, EAN-8, UPC-A)** ve **2D QR Kodlar (Karekod)** üretmenizi, doğrudan Windows panosuna kopyalayarak **Excel'e `Ctrl+V` ile resim olarak yapıştırmanızı**, Excel tabloları ile çift yönlü senkronizasyon yapmanızı ve Windows yazıcınızdan tekli veya A4 sayfasında 3'lü dizilimle (300 DPI) çıktı almanızı sağlar.
+# 🏷️ Barkod & QR Kod Studio
+**Excel ve Baskı Entegrasyonlu Profesyonel Barkod Yönetim Sistemi**
 
----
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]()
 
-## 🚀 Öne Çıkan Özellikler
+Barkod & QR Kod Studio, özellikle TC Kimlik numaraları, personel kodları, ürün seri numaraları ve özel metinler için gelişmiş **1D Barkod** ve **2D QR Kod** üretimi sağlayan profesyonel bir masaüstü uygulamasıdır. Gelişmiş Excel entegrasyonu, toplu üretim özellikleri ve A4 baskı yetenekleriyle iş süreçlerinizi hızlandırır.
 
-### 📊 1. Gelişmiş Excel & Pano Entegrasyonu
-- **🖼️ Barkod Görsellerini Excel Hücrelerine Gömerek Aktarma:** Tablodaki kayıtları Excel'e aktarırken her satırın yanındaki sütuna gerçek barkod/QR kod görselini otomatik gömer.
-- **🖼️ Barkod Görselini Panoya Kopyalama (`Ctrl+Shift+C`):** Oluşturulan barkodu dosyaya kaydetmeye gerek kalmadan panoya kopyalar. Excel'e geçip herhangi bir hücreye **`Ctrl+V`** yaptığınızda **barkod görseli doğrudan Excel'e yapışır!**
-- **📋 Tabloyu Excel Formatında Kopyalama (`Ctrl+C`):** Tablodan seçtiğiniz satırları `Ctrl+C` ile kopyalayıp Excel'e yapıştırdığınızda veriler ayrı ayrı sütunlara otomatik yerleşir.
-- **📥 Excel Panosundan Hızlı Aktarım (`Ctrl+V`):** Excel'de kopyaladığınız satırları dosya açma zahmetine girmeden **"📋 Excel Panosundan Aktar"** butonu veya `Ctrl+V` ile anında sisteme ekler.
-- **📊 Doğrudan `.xlsx` Excel Çıktısı Alma:** Tablodaki tüm verileri profesyonel ve renkli biçimlendirilmiş bir Excel tablosu olarak kaydeder.
-
-### ⚡ 2. Seri Kod & Barkod Üretici
-- **🔢 Sıralı / Seri Kod Üretimi:** Belirlediğiniz başlangıç numarası, adet, ön ek (örn: `URUN-`) ve basamak sayısına göre saniyeler içinde binlerce sıralı barkod üretip listeye ekler.
-
-### 🖨️ 3. Profesyonel Yazdırma & Tasarruflu A4 Şablonu
-- **A4 3'lü Izgara Baskı (300 DPI):** Seçilen kayıtları A4 sayfasına yan yana 3'lü dizilimle (sayfada 12 kart) kesim çizgileriyle yazdırır.
-- **Yazıcı Seçimi:** Sistemdeki tüm yerel ve ağ yazıcılarını listeleyip istenilen yazıcıya doğrudan gönderir.
-
-### 📱 4. Kod Standartları & Esneklik
-- **Çoklu Barkod Formatları:** Code 128 (Evrensel), Code 39 (Alfanümerik), EAN-13 (Perakende), EAN-8 ve UPC-A standartları.
-- **QR Kod & Kombine Kart (QR + Barkod):** Çift okuyucu destekli yaka kartı ve etiket tasarımı.
-- **Dinamik Önizleme & High-DPI:** Yüksek çözünürlüklü ekranlarda net tipografi ve pencere boyutuna göre orantılı canlı önizleme.
-- **Sütun Sıralama (A-Z / Z-A):** Tablo sütun başlıklarına tıklayarak ID, İsim, Soyisim, Kod ve Tarihe göre artan/azalan anlık sıralama.
-- **İsteğe Bağlı Sıkı TC Kimlik Kontrolü:** 11 haneli matematiksel TC algoritma doğrulamasını tek tıkla açıp kapatabilme.
+</div>
 
 ---
 
-## ⌨️ Klavye Kısayolları
+## ✨ Öne Çıkan Özellikler
 
-| Kısayol | İşlev |
-|---|---|
-| **Ctrl + C** | Tablodaki seçili satırları Excel formatında panoya kopyalar |
-| **Ctrl + Shift + C** | Aktif barkod görselini panoya kopyalar (Excel'e `Ctrl+V` ile resim yapıştırılır) |
-| **Ctrl + V** | Excel'den kopyalanan satırları doğrudan programa yapıştırıp kaydeder |
-| **Ctrl + A** | Tablodaki tüm kayıtları seçer |
-| **Ctrl + P** | Seçilen kayıtları yazıcıya gönderir |
-| **Delete** | Seçilen kayıtları tablodan siler |
+🚀 **Gelişmiş Kod Üretimi**
+* **Çoklu Format Desteği:** QR Kod (2D) ve 1D Barkodlar (Code 128, Code 39, EAN-13, EAN-8, UPC-A).
+* **Kombine Kartlar:** Tek bir kart üzerinde hem QR kod hem de Barkod barındırabilme.
+* **Akıllı Doğrulama:** 11 Haneli TC Kimlik numaraları için matematiksel algoritma kontrolü (İsteğe bağlı sıkı denetim).
+
+📊 **Excel ve Pano Entegrasyonu**
+* **Görselli Dışa Aktarım:** Oluşturulan barkodları hücre içine gömülü resimler olarak Excel'e aktarma.
+* **Hızlı İçe Aktarım:** Excel, CSV dosyalarından veya doğrudan panodan (Ctrl+C / Ctrl+V) akıllı veri çekimi.
+
+🖨️ **Profesyonel Baskı ve Çıktı**
+* **A4 Grid Baskı:** Toplu kayıtları otomatik olarak A4 sayfalarına 3'lü sütunlar halinde (grid) dizme ve Word/Excel'e yapıştırılacak formata getirme.
+* **Canlı Önizleme:** Arayüz üzerinden anlık görsel önizleme.
+* **Panoya Kopyalama:** Tek bir barkodu veya A4 sayfalarını doğrudan Windows panosuna kopyalayarak başka programlara resim olarak yapıştırabilme.
+
+🔢 **Seri Üretim**
+* **Toplu Sıralı Kod:** Belirli bir ön ek, başlangıç numarası ve basamak sayısıyla tek tıkla yüzlerce sıralı barkod üretimi (Örn: URUN-0001, URUN-0002).
+
+---
+
+## 📸 Ekran Görüntüleri ve Kullanım
+
+> **Not:** Lütfen uygulamanın ekran görüntülerini ve örnek çıktılarını proje klasöründeki `assets` veya `images` klasörüne ekleyip aşağıdaki bağlantıları güncelleyiniz.
+
+<div align="center">
+  <img src="https://via.placeholder.com/800x450.png?text=Ana+Arayuz+Ekrani" alt="Ana Arayüz" width="800"/>
+  <p><i>Uygulama Ana Arayüzü ve Canlı Önizleme Paneli</i></p>
+</div>
+
+<br/>
+
+### 1. Barkod ve QR Oluşturma
+Sadece kodu (veya TC Kimlik no) girin. İsteğe bağlı olarak İsim, Soyisim ve Kurum Başlığı ekleyebilirsiniz. Sistem, geçersiz TC numaralarında sizi uyarır.
+
+<div align="center">
+  <img src="https://via.placeholder.com/400x300.png?text=Barkod+Olusturma" alt="Kayıt" width="400"/>
+  <img src="https://via.placeholder.com/400x300.png?text=QR+ve+Kombine+Mod" alt="Modlar" width="400"/>
+</div>
+
+### 2. Excel'e Görselli Aktarım
+Tablodaki seçili kayıtları veya tümünü, barkod görselleri hücrelere yerleştirilmiş biçimde Excel (.xlsx) olarak dışa aktarabilirsiniz.
+
+### 3. A4 Toplu Baskı
+Oluşturduğunuz kodları A4 kağıdına uygun grid sisteminde dizer. İster doğrudan yazdırın, ister Word'e yapıştırın.
 
 ---
 
 ## 🛠️ Kurulum ve Çalıştırma
 
+### Gereksinimler
+Uygulamanın çalışması için sisteminizde **Python 3.8 veya üzeri** yüklü olmalıdır.
+
+### 1. Depoyu Klonlayın
+```bash
+git clone https://github.com/kullaniciadi/proje-adi.git
+cd proje-adi
+```
+
+### 2. Gerekli Kütüphaneleri Yükleyin
+Tüm bağımlılıklar `requirements.txt` dosyasında listelenmiştir. Yüklemek için:
 ```bash
 pip install -r requirements.txt
+```
+
+**Temel Bağımlılıklar:**
+* `Pillow` (Görsel işleme)
+* `qrcode` (QR kod üretimi)
+* `python-barcode` (1D Barkod üretimi)
+* `openpyxl` (Excel işlemleri)
+* `pywin32` (Windows pano etkileşimleri ve yazdırma)
+
+### 3. Uygulamayı Başlatın
+```bash
 python main.py
 ```
+
+---
+
+## 📋 Kullanım İpuçları ve Kısayollar
+
+| Kısayol | İşlem |
+| :--- | :--- |
+| `Ctrl + C` | Tabloda seçili satırları Excel uyumlu formatta metin olarak kopyalar. |
+| `Ctrl + Shift + C` | Önizlemedeki mevcut barkod **görselini** kopyalar (Word/Excel'e resim olarak yapıştırmak için). |
+| `Ctrl + V` | Excel'den kopyaladığınız satırları tabloya aktarır. |
+| `Ctrl + A` | Tablodaki tüm kayıtları seçer. |
+| `Ctrl + P` | Seçili kayıtları doğrudan varsayılan yazıcıya gönderir. |
+| `Delete` | Tablodaki seçili kayıtları siler. |
+
+---
+
+## 📂 Proje Yapısı
+
+```text
+📦 Proje Klasörü
+ ┣ 📜 main.py              # Ana GUI uygulamasının başlatıldığı dosya (Tkinter)
+ ┣ 📜 qr_generator.py      # QR, Barkod üretimi ve görsel işleme (Pillow) motoru
+ ┣ 📜 printer_service.py   # Windows yazdırma (win32print) işlemleri
+ ┣ 📜 requirements.txt     # Python kütüphane bağımlılıkları
+ ┗ 📜 workers.db           # (Otomatik oluşturulur) Kayıtların tutulduğu SQLite veritabanı
+```
+
+---
+
+## 🤝 Katkıda Bulunma
+
+1. Bu depoyu forklayın.
+2. Yeni bir özellik dalı oluşturun (`git checkout -b ozellik/YeniOzellik`)
+3. Değişikliklerinizi commit edin (`git commit -m 'Yeni özellik eklendi'`)
+4. Dalınızı push edin (`git push origin ozellik/YeniOzellik`)
+5. Bir Pull Request oluşturun.
+
+## 📄 Lisans
+Bu proje MIT Lisansı ile lisanslanmıştır. Daha fazla bilgi için `LICENSE` dosyasına bakabilirsiniz.
