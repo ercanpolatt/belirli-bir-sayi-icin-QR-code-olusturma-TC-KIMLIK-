@@ -57,7 +57,7 @@ Oluşturduğunuz tüm kodları otomatik hesaplayarak A4 boyutlarına uygun, şı
 Her bir barkod veya QR kod, standartlara uygun ve yüksek kalitede üretilir. Kodu anında PNG olarak kaydedebilir veya "Görseli Kopyala" diyerek doğrudan başka bir uygulamaya (Photoshop, Illustrator, Excel vb.) yapıştırabilirsiniz.
 
 <div align="center">
-  <img src="photos/png%20formati%20.png" alt="PNG Formatında Çıktı" width="350"/>
+  <img src="photos/png%20formati%20.png" alt="PNG Formatında Çıktı" width="650"/>
   <p><i>Detaylı, Okunabilir ve Temiz PNG Kod Formatı</i></p>
 </div>
 
