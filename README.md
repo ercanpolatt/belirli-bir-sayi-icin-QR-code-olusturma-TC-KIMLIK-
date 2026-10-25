@@ -6,6 +6,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]()
+[![YouTube Video](https://img.shields.io/badge/YouTube-Video%20Rehberi-red.svg?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=QjK6kePa7Jc)
 
 Barkod & QR Kod Studio, özellikle TC Kimlik numaraları, personel kodları, ürün seri numaraları ve özel metinler için gelişmiş **1D Barkod** ve **2D QR Kod** üretimi sağlayan profesyonel bir masaüstü uygulamasıdır. Gelişmiş Excel entegrasyonu, toplu üretim özellikleri ve A4 baskı yetenekleriyle iş süreçlerinizi hızlandırır.
 
@@ -31,6 +32,19 @@ Barkod & QR Kod Studio, özellikle TC Kimlik numaraları, personel kodları, ür
 
 🔢 **Seri Üretim**
 * **Toplu Sıralı Kod:** Belirli bir ön ek, başlangıç numarası ve basamak sayısıyla tek tıkla yüzlerce sıralı barkod üretimi (Örn: URUN-0001, URUN-0002).
+
+---
+
+## 🎥 Video Anlatımı ve Kullanım Rehberi
+
+Programın arayüzünü, toplu kod üretimini ve A4 baskı alma süreçlerini uygulamalı olarak izlemek için YouTube videosuna göz atabilirsiniz:
+
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=QjK6kePa7Jc" target="_blank">
+    <img src="https://img.youtube.com/vi/QjK6kePa7Jc/hqdefault.jpg" alt="Barkod & QR Kod Studio Kullanım Videosu" width="750" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"/>
+  </a>
+  <p><i>▶️ Videoyu YouTube üzerinde izlemek için görsele veya <a href="https://www.youtube.com/watch?v=QjK6kePa7Jc"><b>buraya tıklayın</b></a>.</i></p>
+</div>
 
 ---
 
@@ -70,8 +84,8 @@ Uygulamanın çalışması için sisteminizde **Python 3.8 veya üzeri** yüklü
 
 ### 1. Depoyu Klonlayın
 ```bash
-git clone https://github.com/kullaniciadi/proje-adi.git
-cd proje-adi
+git clone https://github.com/ercanpolatt/belirli-bir-sayi-icin-QR-code-olusturma-TC-KIMLIK-.git
+cd belirli-bir-sayi-icin-QR-code-olusturma-TC-KIMLIK-
 ```
 
 ### 2. Gerekli Kütüphaneleri Yükleyin
@@ -88,9 +102,11 @@ pip install -r requirements.txt
 * `pywin32` (Windows pano etkileşimleri ve yazdırma)
 
 ### 3. Uygulamayı Başlatın
+Terminal üzerinden:
 ```bash
 python main.py
 ```
+Veya Windows'ta doğrudan **`baslat.bat`** dosyasına çift tıklayarak başlatabilirsiniz.
 
 ---
 
@@ -114,7 +130,9 @@ python main.py
  ┣ 📜 main.py              # Ana GUI uygulamasının başlatıldığı dosya (Tkinter)
  ┣ 📜 qr_generator.py      # QR, Barkod üretimi ve görsel işleme (Pillow) motoru
  ┣ 📜 printer_service.py   # Windows yazdırma (win32print) işlemleri
+ ┣ 📜 baslat.bat           # Windows için tek tıkla başlatıcı
  ┣ 📜 requirements.txt     # Python kütüphane bağımlılıkları
+ ┣ 📜 LICENSE              # MIT Lisans belgesi
  ┗ 📜 workers.db           # (Otomatik oluşturulur) Kayıtların tutulduğu SQLite veritabanı
 ```
 
