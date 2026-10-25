@@ -52,12 +52,6 @@ Programın arayüzünü, toplu kod üretimini ve A4 baskı alma süreçlerini uy
 
 Uygulamanın modern ve kullanımı kolay arayüzü sayesinde işlemlerinizi saniyeler içinde tamamlayabilirsiniz. İster tekli ister toplu olsun, barkod ve QR kod üretim süreci tamamen hız ve görsellik üzerine tasarlanmıştır.
 
-<div align="center">
-  <img src="photos/uygulama%20arayuzu.png" alt="Ana Arayüz" width="800"/>
-  <p><i>Geniş, Detaylı ve Kullanıcı Dostu Uygulama Arayüzü</i></p>
-</div>
-
-<br/>
 
 ### 1. Toplu A4 Formatında Çıktı ve Baskı
 Oluşturduğunuz tüm kodları otomatik hesaplayarak A4 boyutlarına uygun, şık bir grid (ızgara) sisteminde dizer. Bu sayede seçtiğiniz onlarca personelin veya ürünün kodlarını tek bir hamleyle A4 kağıdına yazdırabilir, Word veya Excel dosyalarına kalitesi bozulmadan kopyalayabilirsiniz.
