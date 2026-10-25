@@ -41,9 +41,9 @@ Programın arayüzünü, toplu kod üretimini ve A4 baskı alma süreçlerini uy
 
 <div align="center">
   <a href="https://www.youtube.com/watch?v=QjK6kePa7Jc" target="_blank">
-    <img src="https://img.youtube.com/vi/QjK6kePa7Jc/hqdefault.jpg" alt="Barkod & QR Kod Studio Kullanım Videosu" width="750" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"/>
+    <img src="photos/uygulama%20arayuzu.png" alt="Barkod & QR Kod Studio Kullanım Videosu" width="800" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"/>
   </a>
-  <p><i>▶️ Videoyu YouTube üzerinde izlemek için görsele veya <a href="https://www.youtube.com/watch?v=QjK6kePa7Jc"><b>buraya tıklayın</b></a>.</i></p>
+  <p><i>▶️ Videoyu YouTube üzerinde izlemek için arayüz görseline veya <a href="https://www.youtube.com/watch?v=QjK6kePa7Jc"><b>buraya tıklayın</b></a>.</i></p>
 </div>
 
 ---
