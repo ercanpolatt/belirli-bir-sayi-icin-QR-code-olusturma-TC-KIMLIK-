@@ -5,3 +5,6 @@ workers.db
 .idea/
 .vscode/
 !photos/*.png
+build/
+dist/
+*.spec
